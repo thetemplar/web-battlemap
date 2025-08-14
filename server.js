@@ -18,7 +18,8 @@ const io = socketIo(server, {
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 
@@ -40,7 +41,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -68,21 +69,36 @@ app.get('/player', (req, res) => {
 });
 
 // API Routes
-app.post('/api/upload-image', upload.single('image'), (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+app.post('/api/upload-image', (req, res) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      console.error('Upload error:', err);
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File too large. Maximum size is 50MB.' });
+        }
+        return res.status(400).json({ error: `Upload error: ${err.message}` });
+      }
+      return res.status(400).json({ error: err.message });
     }
     
-    const imageUrl = `/uploads/${req.file.filename}`;
-    res.json({ 
-      success: true, 
-      imageUrl: imageUrl,
-      filename: req.file.filename 
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+      
+      const imageUrl = `/uploads/${req.file.filename}`;
+      console.log('File uploaded successfully:', req.file.filename);
+      res.json({ 
+        success: true, 
+        imageUrl: imageUrl,
+        filename: req.file.filename 
+      });
+    } catch (error) {
+      console.error('Upload processing error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
 });
 
 app.post('/api/maps', (req, res) => {
@@ -94,7 +110,7 @@ app.post('/api/maps', (req, res) => {
     name: name || 'New Battlemap',
     backgroundImage: backgroundImage || '',
     layers: [],
-    fogOfWar: [],
+    fogDataUrl: null, // No initial fog - DM will set it up
     createdAt: new Date().toISOString()
   };
   
@@ -211,49 +227,6 @@ app.delete('/api/maps/:id/layers/:layerId', (req, res) => {
   battlemaps.set(id, map);
   
   io.emit('layer-deleted', { mapId: id, layerId });
-  res.json({ success: true });
-});
-
-app.post('/api/maps/:id/fog', (req, res) => {
-  const { id } = req.params;
-  const fogArea = req.body;
-  
-  if (!battlemaps.has(id)) {
-    return res.status(404).json({ error: 'Map not found' });
-  }
-  
-  const map = battlemaps.get(id);
-  const newFogArea = {
-    id: uuidv4(),
-    ...fogArea,
-    createdAt: new Date().toISOString()
-  };
-  
-  map.fogOfWar.push(newFogArea);
-  battlemaps.set(id, map);
-  
-  io.emit('fog-added', { mapId: id, fogArea: newFogArea });
-  res.json({ success: true, fogArea: newFogArea });
-});
-
-app.delete('/api/maps/:id/fog/:fogId', (req, res) => {
-  const { id, fogId } = req.params;
-  
-  if (!battlemaps.has(id)) {
-    return res.status(404).json({ error: 'Map not found' });
-  }
-  
-  const map = battlemaps.get(id);
-  const fogIndex = map.fogOfWar.findIndex(f => f.id === fogId);
-  
-  if (fogIndex === -1) {
-    return res.status(404).json({ error: 'Fog area not found' });
-  }
-  
-  map.fogOfWar.splice(fogIndex, 1);
-  battlemaps.set(id, map);
-  
-  io.emit('fog-deleted', { mapId: id, fogId });
   res.json({ success: true });
 });
 

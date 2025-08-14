@@ -13,6 +13,9 @@ RUN npm install --production
 # Copy application files
 COPY . .
 
+# Replace BUILD_TIMESTAMP with actual build time
+RUN sed -i "s/BUILD_TIMESTAMP/$(date '+%Y-%m-%d %H:%M')/g" public/dm.html public/player.html
+
 # Create uploads directory
 RUN mkdir -p uploads
 
