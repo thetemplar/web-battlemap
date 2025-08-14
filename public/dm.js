@@ -51,10 +51,27 @@ class BattlemapDM {
         // Background image cache
         this.backgroundImages = new Map();
         
+        // Layer image cache
+        this.layerImages = new Map();
+        
         // Player view state (for controlling player view)
         this.currentPlayerZoom = 1;
         this.currentPlayerPanX = 0;
         this.currentPlayerPanY = 0;
+        
+        // Image placement state
+        this.pendingImageUrl = null;
+        this.pendingImageName = null;
+        
+        // Resize state
+        this.isResizing = false;
+        this.resizeHandle = null; // 'bottom-right', 'bottom-left', 'top-right', 'top-left'
+        this.originalLayerData = null; // Store original data when starting resize
+        
+        // Layer reordering state
+        this.isReorderingLayers = false;
+        this.draggedLayerItem = null;
+        this.dragPlaceholder = null;
         
         // Initialize after DOM is ready
         if (document.readyState === 'loading') {
@@ -111,7 +128,12 @@ class BattlemapDM {
         // Tool selection
         document.querySelectorAll('.tool-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                this.setTool(e.target.closest('.tool-btn').dataset.tool);
+                const tool = e.target.closest('.tool-btn').dataset.tool;
+                if (tool === 'image') {
+                    this.showImageUploadModal();
+                } else {
+                    this.setTool(tool);
+                }
             });
         });
         
@@ -121,6 +143,9 @@ class BattlemapDM {
         this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         this.canvas.addEventListener('wheel', (e) => this.handleWheel(e));
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // Prevent context menu
+        
+        // Keyboard events
+        document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         
         // Color and size controls
         const drawingColor = document.getElementById('drawingColor');
@@ -164,6 +189,14 @@ class BattlemapDM {
         if (createMapBtn) {
             createMapBtn.addEventListener('click', () => {
                 this.createNewMap();
+            });
+        }
+        
+        // Image upload modal handlers
+        const uploadTokenBtn = document.getElementById('uploadTokenBtn');
+        if (uploadTokenBtn) {
+            uploadTokenBtn.addEventListener('click', () => {
+                this.uploadTokenImage();
             });
         }
         
@@ -419,6 +452,12 @@ class BattlemapDM {
             this.render();
         } else if (this.currentTool === 'select') {
             this.handleSelectMouseDown(x, y);
+        } else if (this.currentTool === 'image' && this.pendingImageUrl) {
+            // Handle image placement
+            this.placeImageToken(x, y);
+        } else if (this.currentTool === 'image' && !this.pendingImageUrl) {
+            // If image tool is selected but no image is pending, show the modal
+            this.showImageUploadModal();
         } else {
             this.isDrawing = true;
             this.tempShape = this.createShape(this.currentTool, x, y);
@@ -491,11 +530,17 @@ class BattlemapDM {
             // Don't reset fog tool - keep it selected for continued use
         } else if (this.isDrawing && this.tempShape) {
             this.finalizeShape();
+        } else if (this.isResizing && this.selectedLayer) {
+            // Finalize resize by saving to server
+            this.saveLayerChanges(this.selectedLayer);
         }
         
         this.isDrawing = false;
         this.isDragging = false;
         this.isFogDrawing = false;
+        this.isResizing = false;
+        this.resizeHandle = null;
+        this.originalLayerData = null;
         this.tempShape = null;
         this.fogDrawPath = [];
     }
@@ -1237,6 +1282,137 @@ class BattlemapDM {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.style.display = 'none';
         });
+    }
+    
+    // Image Upload Modal
+    showImageUploadModal() {
+        document.getElementById('imageUploadModal').style.display = 'block';
+        // Reset the form
+        document.getElementById('tokenImage').value = '';
+        document.getElementById('tokenName').value = '';
+    }
+    
+    uploadTokenImage() {
+        const imageFile = document.getElementById('tokenImage').files[0];
+        const tokenName = document.getElementById('tokenName').value || 'Token';
+        
+        if (!imageFile) {
+            alert('Please select an image file');
+            return;
+        }
+        
+        this.uploadImageFile(imageFile).then(imageUrl => {
+            this.closeModals();
+            // Set the image tool as active and store the image URL for placement
+            this.setTool('image');
+            this.pendingImageUrl = imageUrl;
+            this.pendingImageName = tokenName;
+            // Change cursor to indicate image placement mode
+            this.canvas.style.cursor = 'crosshair';
+            // Update status
+            document.getElementById('statusText').textContent = `Click to place ${tokenName} (Press Esc to cancel)`;
+        }).catch(error => {
+            console.error('Image upload error:', error);
+            alert('Failed to upload image: ' + error.message);
+        });
+    }
+    
+    uploadImageFile(file) {
+        return new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            fetch('/api/upload-image', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+                    });
+                }
+                return response.json();
+            }).then(data => {
+                if (data.success) {
+                    resolve(data.imageUrl);
+                } else {
+                    reject(new Error(data.error));
+                }
+            }).catch(error => {
+                reject(error);
+            });
+        });
+    }
+    
+    placeImageToken(x, y) {
+        if (!this.pendingImageUrl || !this.viewingMapId) return;
+        
+        // Load the image to get its natural dimensions
+        const img = new Image();
+        img.onload = () => {
+            // Get the natural dimensions of the image
+            let width = img.naturalWidth;
+            let height = img.naturalHeight;
+            
+            // Optional: Scale down very large images to prevent extremely large tokens
+            const maxSize = 300; // Maximum dimension in pixels
+            if (width > maxSize || height > maxSize) {
+                const scale = Math.min(maxSize / width, maxSize / height);
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
+            }
+            
+            const imageLayer = {
+                type: 'image',
+                x: x - width / 2, // Center the image on the click point
+                y: y - height / 2,
+                width: width,
+                height: height,
+                imageUrl: this.pendingImageUrl,
+                name: this.pendingImageName || 'Token',
+                opacity: this.drawingOpacity,
+                visible: true
+            };
+            
+            // Add the layer to the map
+            this.addLayer(imageLayer);
+            
+            // Update status
+            document.getElementById('statusText').textContent = `Placed ${this.pendingImageName || 'Token'} (${width}x${height})`;
+            
+            // Clear the pending image data and reset to select tool
+            this.pendingImageUrl = null;
+            this.pendingImageName = null;
+            this.setTool('select');
+            this.canvas.style.cursor = 'default';
+        };
+        
+        img.onerror = () => {
+            console.error('Failed to load image for token placement:', this.pendingImageUrl);
+            // Fallback to default size if image loading fails
+            const defaultSize = 100;
+            const imageLayer = {
+                type: 'image',
+                x: x - defaultSize / 2,
+                y: y - defaultSize / 2,
+                width: defaultSize,
+                height: defaultSize,
+                imageUrl: this.pendingImageUrl,
+                name: this.pendingImageName || 'Token',
+                opacity: this.drawingOpacity,
+                visible: true
+            };
+            
+            this.addLayer(imageLayer);
+            document.getElementById('statusText').textContent = `Placed ${this.pendingImageName || 'Token'} (fallback size)`;
+            
+            this.pendingImageUrl = null;
+            this.pendingImageName = null;
+            this.setTool('select');
+            this.canvas.style.cursor = 'default';
+        };
+        
+        img.src = this.pendingImageUrl;
     }
     
     setFogTool(tool) {
