@@ -15,6 +15,9 @@ class BattlemapPlayer {
         // Background image cache
         this.backgroundImages = new Map();
         
+        // Layer image cache
+        this.layerImages = new Map();
+        
         // Fog caching to prevent flickering
         this.fogImage = null;
         this.fogImageMapId = null;
@@ -331,11 +334,25 @@ class BattlemapPlayer {
                 break;
             case 'image':
                 if (layer.imageUrl) {
-                    const img = new Image();
-                    img.onload = () => {
-                        this.ctx.drawImage(img, layer.x, layer.y, layer.width, layer.height);
-                    };
-                    img.src = layer.imageUrl;
+                    // Check if image is already cached
+                    if (this.layerImages.has(layer.imageUrl)) {
+                        const img = this.layerImages.get(layer.imageUrl);
+                        if (img.complete) {
+                            this.ctx.drawImage(img, layer.x, layer.y, layer.width, layer.height);
+                        }
+                    } else {
+                        // Load and cache the image
+                        const img = new Image();
+                        img.onload = () => {
+                            this.layerImages.set(layer.imageUrl, img);
+                            // Re-render to draw the image with proper transformations
+                            this.render();
+                        };
+                        img.onerror = () => {
+                            console.error('Failed to load layer image:', layer.imageUrl);
+                        };
+                        img.src = layer.imageUrl;
+                    }
                 }
                 break;
         }
