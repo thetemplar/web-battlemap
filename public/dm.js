@@ -1394,10 +1394,17 @@ class BattlemapDM {
         const map = this.maps.get(this.viewingMapId);
         if (!map) return;
         
-        map.layers.forEach(layer => {
+        map.layers.forEach((layer, index) => {
             const item = document.createElement('div');
             item.className = `layer-item ${layer === this.selectedLayer ? 'selected' : ''}`;
+            item.draggable = true;
+            item.dataset.layerId = layer.id;
+            item.dataset.layerIndex = index;
+            
             item.innerHTML = `
+                <div class="layer-drag-handle">
+                    <i class="fas fa-grip-vertical"></i>
+                </div>
                 <div class="layer-info">
                     <button class="layer-visibility" onclick="battlemapDM.toggleLayerVisibility('${layer.id}')">
                         <i class="fas fa-${layer.visible !== false ? 'eye' : 'eye-slash'}"></i>
@@ -1413,7 +1420,130 @@ class BattlemapDM {
                     </button>
                 </div>
             `;
+            
+            // Add drag event listeners
+            item.addEventListener('dragstart', (e) => this.handleLayerDragStart(e, layer, index));
+            item.addEventListener('dragover', (e) => this.handleLayerDragOver(e));
+            item.addEventListener('drop', (e) => this.handleLayerDrop(e, index));
+            item.addEventListener('dragenter', (e) => this.handleLayerDragEnter(e));
+            item.addEventListener('dragleave', (e) => this.handleLayerDragLeave(e));
+            
             container.appendChild(item);
+        });
+    }
+    
+    handleLayerDragStart(e, layer, index) {
+        this.isReorderingLayers = true;
+        this.draggedLayerItem = { layer, index };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/html', e.target.outerHTML);
+        
+        // Add dragging class to the dragged item
+        e.target.classList.add('dragging');
+        
+        // Create placeholder
+        this.createDragPlaceholder();
+    }
+    
+    handleLayerDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    }
+    
+    handleLayerDragEnter(e) {
+        e.preventDefault();
+        const targetItem = e.target.closest('.layer-item');
+        if (targetItem && targetItem !== this.draggedLayerItem?.layer) {
+            targetItem.classList.add('drag-over');
+        }
+    }
+    
+    handleLayerDragLeave(e) {
+        const targetItem = e.target.closest('.layer-item');
+        if (targetItem) {
+            targetItem.classList.remove('drag-over');
+        }
+    }
+    
+    handleLayerDrop(e, dropIndex) {
+        e.preventDefault();
+        
+        if (!this.isReorderingLayers || !this.draggedLayerItem) return;
+        
+        const map = this.maps.get(this.viewingMapId);
+        if (!map) return;
+        
+        const draggedIndex = this.draggedLayerItem.index;
+        const draggedLayer = this.draggedLayerItem.layer;
+        
+        // Remove the dragged layer from its current position
+        map.layers.splice(draggedIndex, 1);
+        
+        // Insert it at the new position
+        if (draggedIndex < dropIndex) {
+            // If moving down, adjust the drop index
+            map.layers.splice(dropIndex - 1, 0, draggedLayer);
+        } else {
+            // If moving up, use the original drop index
+            map.layers.splice(dropIndex, 0, draggedLayer);
+        }
+        
+        // Clean up
+        this.cleanupLayerDrag();
+        
+        // Update the UI
+        this.updateLayerList();
+        this.render();
+        
+        // Save the new order to the server
+        this.saveLayerOrder();
+    }
+    
+    createDragPlaceholder() {
+        const container = document.getElementById('layerList');
+        this.dragPlaceholder = document.createElement('div');
+        this.dragPlaceholder.className = 'layer-item drag-placeholder';
+        this.dragPlaceholder.innerHTML = '<div class="placeholder-content">Drop here</div>';
+        container.appendChild(this.dragPlaceholder);
+    }
+    
+    cleanupLayerDrag() {
+        // Remove dragging classes
+        document.querySelectorAll('.layer-item.dragging').forEach(item => {
+            item.classList.remove('dragging');
+        });
+        document.querySelectorAll('.layer-item.drag-over').forEach(item => {
+            item.classList.remove('drag-over');
+        });
+        
+        // Remove placeholder
+        if (this.dragPlaceholder) {
+            this.dragPlaceholder.remove();
+            this.dragPlaceholder = null;
+        }
+        
+        // Reset state
+        this.isReorderingLayers = false;
+        this.draggedLayerItem = null;
+    }
+    
+    saveLayerOrder() {
+        const map = this.maps.get(this.viewingMapId);
+        if (!map) return;
+        
+        // Send the new layer order to the server
+        fetch(`/api/maps/${this.viewingMapId}/layers/reorder`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ layerIds: map.layers.map(l => l.id) })
+        }).then(response => {
+            if (response.ok) {
+                console.log('Layer order saved successfully');
+            } else {
+                console.error('Failed to save layer order');
+            }
+        }).catch(error => {
+            console.error('Error saving layer order:', error);
         });
     }
     

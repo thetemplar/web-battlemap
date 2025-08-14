@@ -236,6 +236,42 @@ app.delete('/api/maps/:id/layers/:layerId', (req, res) => {
   res.json({ success: true });
 });
 
+app.put('/api/maps/:id/layers/reorder', (req, res) => {
+  const { id } = req.params;
+  const { layerIds } = req.body;
+  
+  if (!battlemaps.has(id)) {
+    return res.status(404).json({ error: 'Map not found' });
+  }
+  
+  const map = battlemaps.get(id);
+  
+  // Validate that all layer IDs exist in the map
+  const existingLayerIds = map.layers.map(l => l.id);
+  const validLayerIds = layerIds.filter(id => existingLayerIds.includes(id));
+  
+  if (validLayerIds.length !== existingLayerIds.length) {
+    return res.status(400).json({ error: 'Invalid layer IDs provided' });
+  }
+  
+  // Reorder layers based on the provided order
+  const reorderedLayers = [];
+  for (const layerId of layerIds) {
+    const layer = map.layers.find(l => l.id === layerId);
+    if (layer) {
+      reorderedLayers.push(layer);
+    }
+  }
+  
+  map.layers = reorderedLayers;
+  battlemaps.set(id, map);
+  
+  // Broadcast the updated map to all clients
+  io.emit('map-updated', { mapId: id, map });
+  
+  res.json({ success: true, map });
+});
+
 app.post('/api/active-map', (req, res) => {
   const { mapId } = req.body;
   
