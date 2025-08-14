@@ -498,6 +498,18 @@ class BattlemapDM {
         const screenCenterY = (-this.pan.y / this.zoom) + (viewportHeight / 2);
         document.getElementById('screenCenter').textContent = `Center: ${Math.round(screenCenterX)}, ${Math.round(screenCenterY)}`;
         
+        // Update cursor for resize handles
+        if (this.currentTool === 'select' && this.selectedLayer) {
+            const resizeHandle = this.getResizeHandle(x, y, this.selectedLayer);
+            if (resizeHandle) {
+                this.canvas.style.cursor = this.getResizeCursor(resizeHandle);
+            } else if (this.isPointInShape(x, y, this.selectedLayer)) {
+                this.canvas.style.cursor = 'move';
+            } else {
+                this.canvas.style.cursor = 'default';
+            }
+        }
+        
         if (this.isPanning) {
             // Right-click panning
             this.pan.x = e.clientX - this.panStart.x;
@@ -513,6 +525,9 @@ class BattlemapDM {
         } else if (this.isDragging && this.selectedLayer) {
             this.moveSelectedLayer(x - this.dragStart.x, y - this.dragStart.y);
             this.dragStart = { x, y };
+            this.render();
+        } else if (this.isResizing && this.selectedLayer && this.originalLayerData) {
+            this.resizeSelectedLayer(x, y);
             this.render();
         }
     }
@@ -563,9 +578,40 @@ class BattlemapDM {
         this.render();
     }
     
+    handleKeyDown(e) {
+        if (e.key === 'Escape') {
+            // Cancel image placement mode
+            if (this.currentTool === 'image' && this.pendingImageUrl) {
+                this.pendingImageUrl = null;
+                this.pendingImageName = null;
+                this.setTool('select');
+                this.canvas.style.cursor = 'default';
+                document.getElementById('statusText').textContent = 'Ready';
+            }
+        }
+    }
+    
     handleSelectMouseDown(x, y) {
         const map = this.maps.get(this.viewingMapId);
         if (!map) return;
+        
+        // First check if we're clicking on a resize handle of the selected layer
+        if (this.selectedLayer) {
+            const resizeHandle = this.getResizeHandle(x, y, this.selectedLayer);
+            if (resizeHandle) {
+                this.isResizing = true;
+                this.resizeHandle = resizeHandle;
+                this.originalLayerData = {
+                    x: this.selectedLayer.x,
+                    y: this.selectedLayer.y,
+                    width: this.selectedLayer.width,
+                    height: this.selectedLayer.height,
+                    endX: this.selectedLayer.endX,
+                    endY: this.selectedLayer.endY
+                };
+                return;
+            }
+        }
         
         // Check layers in reverse order (top to bottom)
         for (let i = map.layers.length - 1; i >= 0; i--) {
@@ -639,10 +685,45 @@ class BattlemapDM {
             this.selectedLayer.endY += dy;
         }
         
-        fetch(`/api/maps/${this.viewingMapId}/layers/${this.selectedLayer.id}`, {
+        this.saveLayerChanges(this.selectedLayer);
+    }
+    
+    resizeSelectedLayer(x, y) {
+        if (!this.selectedLayer || !this.originalLayerData || !this.resizeHandle) return;
+        
+        const original = this.originalLayerData;
+        
+        switch (this.resizeHandle) {
+            case 'bottom-right':
+                this.selectedLayer.width = Math.max(10, x - original.x);
+                this.selectedLayer.height = Math.max(10, y - original.y);
+                break;
+            case 'bottom-left':
+                this.selectedLayer.x = x;
+                this.selectedLayer.width = Math.max(10, original.x + original.width - x);
+                this.selectedLayer.height = Math.max(10, y - original.y);
+                break;
+            case 'top-right':
+                this.selectedLayer.y = y;
+                this.selectedLayer.width = Math.max(10, x - original.x);
+                this.selectedLayer.height = Math.max(10, original.y + original.height - y);
+                break;
+            case 'top-left':
+                this.selectedLayer.x = x;
+                this.selectedLayer.y = y;
+                this.selectedLayer.width = Math.max(10, original.x + original.width - x);
+                this.selectedLayer.height = Math.max(10, original.y + original.height - y);
+                break;
+        }
+    }
+    
+    saveLayerChanges(layer) {
+        if (!this.viewingMapId) return;
+        
+        fetch(`/api/maps/${this.viewingMapId}/layers/${layer.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(this.selectedLayer)
+            body: JSON.stringify(layer)
         });
     }
     
@@ -676,6 +757,77 @@ class BattlemapDM {
             default:
                 return false;
         }
+    }
+    
+    getResizeHandle(x, y, shape) {
+        if (!shape || (shape.type === 'line')) return null;
+        
+        const handleSize = 8;
+        const tolerance = handleSize / 2;
+        
+        // Calculate corner positions
+        const corners = {
+            'bottom-right': { x: shape.x + shape.width, y: shape.y + shape.height },
+            'bottom-left': { x: shape.x, y: shape.y + shape.height },
+            'top-right': { x: shape.x + shape.width, y: shape.y },
+            'top-left': { x: shape.x, y: shape.y }
+        };
+        
+        // Check if point is near any corner
+        for (const [handle, pos] of Object.entries(corners)) {
+            const dx = x - pos.x;
+            const dy = y - pos.y;
+            if (dx * dx + dy * dy <= tolerance * tolerance) {
+                return handle;
+            }
+        }
+        
+        return null;
+    }
+    
+    getResizeCursor(handle) {
+        switch (handle) {
+            case 'bottom-right':
+            case 'top-left':
+                return 'nw-resize';
+            case 'bottom-left':
+            case 'top-right':
+                return 'ne-resize';
+            default:
+                return 'default';
+        }
+    }
+    
+    drawResizeHandles(layer) {
+        const handleSize = 6;
+        const halfHandle = handleSize / 2;
+        
+        // Save context state
+        this.ctx.save();
+        
+        // Set handle style
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.strokeStyle = '#00ff00';
+        this.ctx.lineWidth = 1;
+        this.ctx.setLineDash([]); // Solid line for handles
+        
+        // Draw corner handles
+        const corners = [
+            { x: layer.x, y: layer.y }, // top-left
+            { x: layer.x + layer.width, y: layer.y }, // top-right
+            { x: layer.x, y: layer.y + layer.height }, // bottom-left
+            { x: layer.x + layer.width, y: layer.y + layer.height } // bottom-right
+        ];
+        
+        corners.forEach(corner => {
+            this.ctx.beginPath();
+            this.ctx.rect(corner.x - halfHandle, corner.y - halfHandle, handleSize, handleSize);
+            this.ctx.fill();
+            this.ctx.stroke();
+        });
+        
+        // Restore context state
+        this.ctx.restore();
     }
     
     render() {
@@ -817,6 +969,11 @@ class BattlemapDM {
                 case 'image':
                     this.ctx.strokeRect(layer.x, layer.y, layer.width, layer.height);
                     break;
+            }
+            
+            // Draw resize handles for non-line shapes
+            if (layer.type !== 'line') {
+                this.drawResizeHandles(layer);
             }
         }
         
