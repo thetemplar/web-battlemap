@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D&D Battlemap - DM Interface</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-dragon"></i> DM Control</h2>
+                <div class="build-info">
+                    <small>Build: BUILD_TIMESTAMP</small>
+                </div>
+            </div>
+            
+            <!-- Map Management -->
+            <div class="sidebar-section">
+                <h3><i class="fas fa-map"></i> Battlemaps</h3>
+                <div class="map-controls">
+                    <button id="newMapBtn" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> New Map
+                    </button>
+                    <div id="mapTabs" class="map-tabs"></div>
+                </div>
+            </div>
+            
+            <!-- Drawing Tools -->
+            <div class="sidebar-section">
+                <h3><i class="fas fa-paint-brush"></i> Drawing Tools</h3>
+                <div class="tool-controls">
+                    <div class="tool-group">
+                        <button id="selectTool" class="tool-btn active" data-tool="select">
+                            <i class="fas fa-mouse-pointer"></i>
+                        </button>
+                        <button id="rectangleTool" class="tool-btn" data-tool="rectangle">
+                            <i class="fas fa-square"></i>
+                        </button>
+                        <button id="circleTool" class="tool-btn" data-tool="circle">
+                            <i class="fas fa-circle"></i>
+                        </button>
+                        <button id="lineTool" class="tool-btn" data-tool="line">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <button id="imageTool" class="tool-btn" data-tool="image">
+                            <i class="fas fa-image"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="color-controls">
+                        <label>Color:</label>
+                        <input type="color" id="drawingColor" value="#ff0000">
+                        <label>Opacity:</label>
+                        <input type="range" id="opacitySlider" min="0" max="100" value="100">
+                        <span id="opacityValue">100%</span>
+                    </div>
+                    
+                    <div class="size-controls">
+                        <label>Size:</label>
+                        <input type="range" id="sizeSlider" min="1" max="50" value="5">
+                        <span id="sizeValue">5px</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Fog of War -->
+            <div class="sidebar-section">
+                <h3><i class="fas fa-cloud"></i> Fog of War</h3>
+                <div class="fog-controls">
+                    <div class="fog-tool-group">
+                        <button id="showEverythingBtn" class="tool-btn" data-tool="show-all" title="Show Everything">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button id="fogEverythingBtn" class="tool-btn" data-tool="fog-all" title="Fog Everything">
+                            <i class="fas fa-eye-slash"></i>
+                        </button>
+                        <button id="fogBrushBtn" class="tool-btn" data-tool="fog-brush" title="Fog Brush">
+                            <i class="fas fa-paint-brush"></i>
+                        </button>
+                        <button id="revealBrushBtn" class="tool-btn" data-tool="reveal-brush" title="Reveal Brush">
+                            <i class="fas fa-eraser"></i>
+                        </button>
+                    </div>
+                    <div class="fog-brush-controls">
+                        <label>Brush Size:</label>
+                        <input type="range" id="fogBrushSizeSlider" min="10" max="200" value="50">
+                        <span id="fogBrushSizeValue">50px</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Layer Management -->
+            <div class="sidebar-section">
+                <h3><i class="fas fa-layers"></i> Layers</h3>
+                <div id="layerList" class="layer-list"></div>
+            </div>
+            
+            <!-- Player View Control -->
+            <div class="sidebar-section">
+                <h3><i class="fas fa-users"></i> Player View Control</h3>
+                <div class="player-view-controls">
+                    <div class="view-controls">
+                        <label>Player Zoom:</label>
+                        <input type="range" id="playerZoomSlider" min="0.1" max="5" step="0.1" value="1">
+                        <span id="playerZoomValue">100%</span>
+                    </div>
+                    <div class="view-controls">
+                        <label>Player Pan X (Center):</label>
+                        <input type="range" id="playerPanXSlider" min="0" max="2000" value="0">
+                        <span id="playerPanXValue">0px</span>
+                    </div>
+                    <div class="view-controls">
+                        <label>Player Pan Y (Center):</label>
+                        <input type="range" id="playerPanYSlider" min="0" max="2000" value="0">
+                        <span id="playerPanYValue">0px</span>
+                    </div>
+                    <div class="view-buttons">
+                        <button id="resetPlayerViewBtn" class="btn btn-secondary">
+                            <i class="fas fa-home"></i> Reset View
+                        </button>
+                        <button id="syncPlayerViewBtn" class="btn btn-primary">
+                            <i class="fas fa-sync"></i> Sync to DM View
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Canvas Area -->
+        <div class="main-content">
+            <div class="canvas-container">
+                <canvas id="battlemapCanvas"></canvas>
+                <div class="canvas-overlay">
+                    <div class="zoom-controls">
+                        <button id="zoomIn" class="zoom-btn"><i class="fas fa-search-plus"></i></button>
+                        <button id="zoomOut" class="zoom-btn"><i class="fas fa-search-minus"></i></button>
+                        <button id="resetZoom" class="zoom-btn"><i class="fas fa-expand-arrows-alt"></i></button>
+                    </div>
+                    <div class="status-bar">
+                        <span id="statusText">Ready</span>
+                        <span id="coordinates">0, 0</span>
+                        <span id="screenCenter">Center: 0, 0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modals -->
+    <div id="newMapModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Battlemap</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="mapName">Map Name:</label>
+                    <input type="text" id="mapName" placeholder="Enter map name">
+                </div>
+                <div class="form-group">
+                    <label for="mapBackground">Background Image:</label>
+                    <input type="file" id="mapBackground" accept="image/*">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="createMapBtn" class="btn btn-primary">Create Map</button>
+                <button class="btn btn-secondary close-modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="imageUploadModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Upload Token Image</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="tokenImage">Select Image:</label>
+                    <input type="file" id="tokenImage" accept="image/*">
+                </div>
+                <div class="form-group">
+                    <label for="tokenName">Token Name:</label>
+                    <input type="text" id="tokenName" placeholder="Enter token name">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="uploadTokenBtn" class="btn btn-primary">Upload Token</button>
+                <button class="btn btn-secondary close-modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="dm.js"></script>
+</body>
+</html> 

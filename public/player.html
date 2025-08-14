@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D&D Battlemap - Player View</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="player-view">
+    <div class="player-container">
+        <!-- Canvas Container -->
+        <div class="canvas-container">
+            <canvas id="playerCanvas"></canvas>
+        </div>
+        
+        <!-- Loading Screen -->
+        <div id="loadingScreen" class="loading-screen">
+            <div class="loading-content">
+                <i class="fas fa-spinner fa-spin"></i>
+                <h2>Loading Battlemap...</h2>
+                <p>Waiting for DM to start the session</p>
+            </div>
+        </div>
+        
+        <!-- No Map Screen -->
+        <div id="noMapScreen" class="no-map-screen" style="display: none;">
+            <div class="no-map-content">
+                <i class="fas fa-map"></i>
+                <h2>No Battlemap Active</h2>
+                <p>The DM hasn't selected a battlemap yet.</p>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="player.js"></script>
+</body>
+</html> 
