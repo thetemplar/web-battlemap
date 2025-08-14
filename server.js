@@ -59,6 +59,12 @@ const upload = multer({
 const battlemaps = new Map();
 let activeMapId = null;
 
+// Player view state (controlled by DM)
+let playerView = {
+  zoom: 1,
+  pan: { x: 0, y: 0 }
+};
+
 // Routes
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dm.html'));
@@ -242,6 +248,40 @@ app.post('/api/active-map', (req, res) => {
   res.json({ success: true, activeMapId });
 });
 
+// Player view control endpoints
+app.get('/api/player-view', (req, res) => {
+  res.json({ success: true, playerView });
+});
+
+app.post('/api/player-view', (req, res) => {
+  const { zoom, pan } = req.body;
+  
+  if (zoom !== undefined) {
+    playerView.zoom = Math.max(0.1, Math.min(5, zoom)); // Clamp zoom between 0.1 and 5
+  }
+  
+  if (pan !== undefined) {
+    playerView.pan = { x: pan.x || 0, y: pan.y || 0 };
+  }
+  
+  // Broadcast the new player view to all clients
+  io.emit('player-view-changed', { playerView });
+  
+  res.json({ success: true, playerView });
+});
+
+app.post('/api/player-view/reset', (req, res) => {
+  playerView = {
+    zoom: 1,
+    pan: { x: 0, y: 0 }
+  };
+  
+  // Broadcast the reset player view to all clients
+  io.emit('player-view-changed', { playerView });
+  
+  res.json({ success: true, playerView });
+});
+
 // Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
@@ -249,7 +289,8 @@ io.on('connection', (socket) => {
   // Send current state to new connections
   socket.emit('initial-state', {
     maps: Array.from(battlemaps.values()),
-    activeMapId
+    activeMapId,
+    playerView
   });
   
   socket.on('disconnect', () => {
