@@ -4,339 +4,439 @@ const socketIo = require('socket.io');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
-const cors = require('cors');
+const bcrypt = require('bcrypt');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
 });
 
 // Middleware
-app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
 
-// Create uploads directory if it doesn't exist
-if (!fs.existsSync('uploads')) {
-  fs.mkdirSync('uploads');
+// File upload configuration
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+
+const upload = multer({ storage: storage });
+
+// Ensure directories exist
+const adventuresDir = path.join(__dirname, 'adventures');
+const uploadsDir = path.join(__dirname, 'uploads');
+
+if (!fs.existsSync(adventuresDir)) {
+    fs.mkdirSync(adventuresDir, { recursive: true });
+}
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  }
-});
+// Adventure management functions
+function getAdventurePath(adventureId) {
+    return path.join(adventuresDir, `${adventureId}.json`);
+}
 
-const upload = multer({ 
-  storage: storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed!'));
-    }
-  }
-});
-
-// Global state for battlemaps
-const battlemaps = new Map();
-let activeMapId = null;
-
-// Player view state (controlled by DM)
-let playerView = {
-  zoom: 1,
-  pan: { x: 0, y: 0 }
-};
-
-// Routes
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'dm.html'));
-});
-
-app.get('/player', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'player.html'));
-});
-
-// API Routes
-app.post('/api/upload-image', (req, res) => {
-  upload.single('image')(req, res, (err) => {
-    if (err) {
-      console.error('Upload error:', err);
-      if (err instanceof multer.MulterError) {
-        if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({ error: 'File too large. Maximum size is 50MB.' });
+function loadAdventure(adventureId) {
+    try {
+        const filePath = getAdventurePath(adventureId);
+        if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf8');
+            return JSON.parse(data);
         }
-        return res.status(400).json({ error: `Upload error: ${err.message}` });
-      }
-      return res.status(400).json({ error: err.message });
+    } catch (error) {
+        console.error(`Error loading adventure ${adventureId}:`, error);
+    }
+    return null;
+}
+
+function saveAdventure(adventure) {
+    try {
+        const filePath = getAdventurePath(adventure.id);
+        fs.writeFileSync(filePath, JSON.stringify(adventure, null, 2));
+        return true;
+    } catch (error) {
+        console.error(`Error saving adventure ${adventure.id}:`, error);
+        return false;
+    }
+}
+
+function getAllAdventures() {
+    const adventures = [];
+    try {
+        const files = fs.readdirSync(adventuresDir);
+        for (const file of files) {
+            if (file.endsWith('.json')) {
+                const adventureId = file.replace('.json', '');
+                const adventure = loadAdventure(adventureId);
+                if (adventure) {
+                    // Don't include maps in the list to keep it lightweight
+                    const { maps, ...adventureInfo } = adventure;
+                    adventures.push(adventureInfo);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading adventures:', error);
+    }
+    return adventures;
+}
+
+// Adventure API endpoints
+app.get('/api/adventures', (req, res) => {
+    const adventures = getAllAdventures();
+    res.json(adventures);
+});
+
+app.post('/api/adventures', async (req, res) => {
+    const { name, description, password } = req.body;
+    
+    if (!name || name.trim() === '') {
+        return res.status(400).json({ error: 'Adventure name is required' });
+    }
+    
+    const adventureId = `adventure-${Date.now()}`;
+    const adventure = {
+        id: adventureId,
+        name: name.trim(),
+        description: description ? description.trim() : '',
+        password: password ? await bcrypt.hash(password, 10) : null,
+        created: new Date().toISOString(),
+        maps: {}
+    };
+    
+    if (saveAdventure(adventure)) {
+        const { maps, password, ...adventureInfo } = adventure;
+        res.json(adventureInfo);
+    } else {
+        res.status(500).json({ error: 'Failed to create adventure' });
+    }
+});
+
+app.post('/api/adventures/:id/verify', async (req, res) => {
+    const { id } = req.params;
+    const { password } = req.body;
+    
+    const adventure = loadAdventure(id);
+    if (!adventure) {
+        return res.status(404).json({ error: 'Adventure not found' });
+    }
+    
+    if (adventure.password) {
+        if (!password) {
+            return res.status(401).json({ error: 'Password required' });
+        }
+        
+        const isValid = await bcrypt.compare(password, adventure.password);
+        if (!isValid) {
+            return res.status(401).json({ error: 'Invalid password' });
+        }
+    }
+    
+    res.json({ success: true, adventure: { id: adventure.id, name: adventure.name } });
+});
+
+app.delete('/api/adventures/:id', async (req, res) => {
+    const { id } = req.params;
+    const { password } = req.body;
+    
+    const adventure = loadAdventure(id);
+    if (!adventure) {
+        return res.status(404).json({ error: 'Adventure not found' });
+    }
+    
+    if (adventure.password) {
+        if (!password) {
+            return res.status(401).json({ error: 'Password required' });
+        }
+        
+        const isValid = await bcrypt.compare(password, adventure.password);
+        if (!isValid) {
+            return res.status(401).json({ error: 'Invalid password' });
+        }
     }
     
     try {
-      if (!req.file) {
+        const filePath = getAdventurePath(id);
+        fs.unlinkSync(filePath);
+        res.json({ success: true });
+    } catch (error) {
+        console.error(`Error deleting adventure ${id}:`, error);
+        res.status(500).json({ error: 'Failed to delete adventure' });
+    }
+});
+
+// Modified map endpoints to be adventure-scoped
+app.get('/api/adventures/:adventureId/maps', (req, res) => {
+    const { adventureId } = req.params;
+    const adventure = loadAdventure(adventureId);
+    
+    if (!adventure) {
+        return res.status(404).json({ error: 'Adventure not found' });
+    }
+    
+    res.json(adventure.maps);
+});
+
+app.post('/api/adventures/:adventureId/maps', (req, res) => {
+    const { adventureId } = req.params;
+    const { name, width, height, backgroundImage } = req.body;
+    
+    const adventure = loadAdventure(adventureId);
+    if (!adventure) {
+        return res.status(404).json({ error: 'Adventure not found' });
+    }
+    
+    const mapId = `map-${Date.now()}`;
+    const newMap = {
+        id: mapId,
+        name: name || 'New Map',
+        width: width || 800,
+        height: height || 600,
+        backgroundImage: backgroundImage || null,
+        layers: [],
+        fogOfWar: []
+    };
+    
+    adventure.maps[mapId] = newMap;
+    
+    if (saveAdventure(adventure)) {
+        res.json(newMap);
+        io.emit('map-created', { adventureId, map: newMap });
+    } else {
+        res.status(500).json({ error: 'Failed to create map' });
+    }
+});
+
+app.put('/api/adventures/:adventureId/maps/:mapId', (req, res) => {
+    const { adventureId, mapId } = req.params;
+    const updates = req.body;
+    
+    const adventure = loadAdventure(adventureId);
+    if (!adventure || !adventure.maps[mapId]) {
+        return res.status(404).json({ error: 'Map not found' });
+    }
+    
+    adventure.maps[mapId] = { ...adventure.maps[mapId], ...updates };
+    
+    if (saveAdventure(adventure)) {
+        res.json(adventure.maps[mapId]);
+        io.emit('map-updated', { adventureId, mapId, map: adventure.maps[mapId] });
+    } else {
+        res.status(500).json({ error: 'Failed to update map' });
+    }
+});
+
+app.delete('/api/adventures/:adventureId/maps/:mapId', (req, res) => {
+    const { adventureId, mapId } = req.params;
+    
+    const adventure = loadAdventure(adventureId);
+    if (!adventure || !adventure.maps[mapId]) {
+        return res.status(404).json({ error: 'Map not found' });
+    }
+    
+    delete adventure.maps[mapId];
+    
+    if (saveAdventure(adventure)) {
+        res.json({ success: true });
+        io.emit('map-deleted', { adventureId, mapId });
+    } else {
+        res.status(500).json({ error: 'Failed to delete map' });
+    }
+});
+
+// Layer endpoints (adventure-scoped)
+app.post('/api/adventures/:adventureId/maps/:mapId/layers', (req, res) => {
+    const { adventureId, mapId } = req.params;
+    const layer = req.body;
+    
+    const adventure = loadAdventure(adventureId);
+    if (!adventure || !adventure.maps[mapId]) {
+        return res.status(404).json({ error: 'Map not found' });
+    }
+    
+    if (!adventure.maps[mapId].layers) {
+        adventure.maps[mapId].layers = [];
+    }
+    
+    adventure.maps[mapId].layers.push(layer);
+    
+    if (saveAdventure(adventure)) {
+        res.json(layer);
+        io.emit('layer-added', { adventureId, mapId, layer });
+    } else {
+        res.status(500).json({ error: 'Failed to add layer' });
+    }
+});
+
+app.put('/api/adventures/:adventureId/maps/:mapId/layers/:layerId', (req, res) => {
+    const { adventureId, mapId, layerId } = req.params;
+    const updates = req.body;
+    
+    const adventure = loadAdventure(adventureId);
+    if (!adventure || !adventure.maps[mapId]) {
+        return res.status(404).json({ error: 'Map not found' });
+    }
+    
+    const layerIndex = adventure.maps[mapId].layers.findIndex(l => l.id === layerId);
+    if (layerIndex === -1) {
+        return res.status(404).json({ error: 'Layer not found' });
+    }
+    
+    adventure.maps[mapId].layers[layerIndex] = { ...adventure.maps[mapId].layers[layerIndex], ...updates };
+    
+    if (saveAdventure(adventure)) {
+        res.json(adventure.maps[mapId].layers[layerIndex]);
+        io.emit('layer-updated', { adventureId, mapId, layer: adventure.maps[mapId].layers[layerIndex] });
+    } else {
+        res.status(500).json({ error: 'Failed to update layer' });
+    }
+});
+
+app.delete('/api/adventures/:adventureId/maps/:mapId/layers/:layerId', (req, res) => {
+    const { adventureId, mapId, layerId } = req.params;
+    
+    const adventure = loadAdventure(adventureId);
+    if (!adventure || !adventure.maps[mapId]) {
+        return res.status(404).json({ error: 'Map not found' });
+    }
+    
+    const layerIndex = adventure.maps[mapId].layers.findIndex(l => l.id === layerId);
+    if (layerIndex === -1) {
+        return res.status(404).json({ error: 'Layer not found' });
+    }
+    
+    adventure.maps[mapId].layers.splice(layerIndex, 1);
+    
+    if (saveAdventure(adventure)) {
+        res.json({ success: true });
+        io.emit('layer-deleted', { adventureId, mapId, layerId });
+    } else {
+        res.status(500).json({ error: 'Failed to delete layer' });
+    }
+});
+
+app.put('/api/adventures/:adventureId/maps/:mapId/layers/reorder', (req, res) => {
+    const { adventureId, mapId } = req.params;
+    const { layerIds } = req.body;
+    
+    const adventure = loadAdventure(adventureId);
+    if (!adventure || !adventure.maps[mapId]) {
+        return res.status(404).json({ error: 'Map not found' });
+    }
+    
+    // Validate that all layer IDs exist in the map
+    const existingLayerIds = adventure.maps[mapId].layers.map(l => l.id);
+    const validLayerIds = layerIds.filter(id => existingLayerIds.includes(id));
+    
+    if (validLayerIds.length !== existingLayerIds.length) {
+        return res.status(400).json({ error: 'Invalid layer IDs provided' });
+    }
+    
+    // Reorder layers based on the provided order
+    const reorderedLayers = [];
+    for (const layerId of layerIds) {
+        const layer = adventure.maps[mapId].layers.find(l => l.id === layerId);
+        if (layer) {
+            reorderedLayers.push(layer);
+        }
+    }
+    
+    adventure.maps[mapId].layers = reorderedLayers;
+    
+    if (saveAdventure(adventure)) {
+        res.json({ success: true, map: adventure.maps[mapId] });
+        io.emit('map-updated', { adventureId, mapId, map: adventure.maps[mapId] });
+    } else {
+        res.status(500).json({ error: 'Failed to reorder layers' });
+    }
+});
+
+// Fog of war endpoints (adventure-scoped)
+app.put('/api/adventures/:adventureId/maps/:mapId/fog', (req, res) => {
+    const { adventureId, mapId } = req.params;
+    const { fogOfWar } = req.body;
+    
+    const adventure = loadAdventure(adventureId);
+    if (!adventure || !adventure.maps[mapId]) {
+        return res.status(404).json({ error: 'Map not found' });
+    }
+    
+    adventure.maps[mapId].fogOfWar = fogOfWar;
+    
+    if (saveAdventure(adventure)) {
+        res.json({ success: true });
+        io.emit('fog-updated', { adventureId, mapId, fogOfWar });
+    } else {
+        res.status(500).json({ error: 'Failed to update fog of war' });
+    }
+});
+
+// File upload endpoint
+app.post('/upload', upload.single('image'), (req, res) => {
+    if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
-      }
-      
-      const imageUrl = `/uploads/${req.file.filename}`;
-      console.log('File uploaded successfully:', req.file.filename);
-      res.json({ 
+    }
+    
+    const imageUrl = `/uploads/${req.file.filename}`;
+    res.json({ 
         success: true, 
         imageUrl: imageUrl,
         filename: req.file.filename 
-      });
-    } catch (error) {
-      console.error('Upload processing error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
+    });
 });
 
-app.post('/api/maps', (req, res) => {
-  const { name, backgroundImage } = req.body;
-  const mapId = uuidv4();
-  
-  const newMap = {
-    id: mapId,
-    name: name || 'New Battlemap',
-    backgroundImage: backgroundImage || '',
-    layers: [],
-    fogDataUrl: null, // No initial fog - DM will set it up
-    createdAt: new Date().toISOString()
-  };
-  
-  battlemaps.set(mapId, newMap);
-  
-  if (!activeMapId) {
-    activeMapId = mapId;
-  }
-  
-  res.json({ success: true, map: newMap });
+// Serve uploaded files
+app.use('/uploads', express.static('uploads'));
+
+// Route handlers for different pages
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.get('/api/maps', (req, res) => {
-  const maps = Array.from(battlemaps.values());
-  res.json({ maps, activeMapId });
+app.get('/adventure/:adventureId/dm', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'dm.html'));
 });
 
-app.put('/api/maps/:id', (req, res) => {
-  const { id } = req.params;
-  const updates = req.body;
-  
-  if (!battlemaps.has(id)) {
-    return res.status(404).json({ error: 'Map not found' });
-  }
-  
-  const map = battlemaps.get(id);
-  Object.assign(map, updates);
-  battlemaps.set(id, map);
-  
-  // Broadcast updates to all connected clients
-  io.emit('map-updated', { mapId: id, map });
-  
-  res.json({ success: true, map });
-});
-
-app.delete('/api/maps/:id', (req, res) => {
-  const { id } = req.params;
-  
-  if (!battlemaps.has(id)) {
-    return res.status(404).json({ error: 'Map not found' });
-  }
-  
-  battlemaps.delete(id);
-  
-  // If this was the active map, set a new active map
-  if (activeMapId === id) {
-    const remainingMaps = Array.from(battlemaps.keys());
-    activeMapId = remainingMaps.length > 0 ? remainingMaps[0] : null;
-  }
-  
-  io.emit('map-deleted', { mapId: id, activeMapId });
-  res.json({ success: true });
-});
-
-app.post('/api/maps/:id/layers', (req, res) => {
-  const { id } = req.params;
-  const layer = req.body;
-  
-  if (!battlemaps.has(id)) {
-    return res.status(404).json({ error: 'Map not found' });
-  }
-  
-  const map = battlemaps.get(id);
-  const newLayer = {
-    id: uuidv4(),
-    ...layer,
-    createdAt: new Date().toISOString()
-  };
-  
-  map.layers.push(newLayer);
-  battlemaps.set(id, map);
-  
-  io.emit('layer-added', { mapId: id, layer: newLayer });
-  res.json({ success: true, layer: newLayer });
-});
-
-app.put('/api/maps/:id/layers/:layerId', (req, res) => {
-  const { id, layerId } = req.params;
-  const updates = req.body;
-  
-  if (!battlemaps.has(id)) {
-    return res.status(404).json({ error: 'Map not found' });
-  }
-  
-  const map = battlemaps.get(id);
-  const layerIndex = map.layers.findIndex(l => l.id === layerId);
-  
-  if (layerIndex === -1) {
-    return res.status(404).json({ error: 'Layer not found' });
-  }
-  
-  Object.assign(map.layers[layerIndex], updates);
-  battlemaps.set(id, map);
-  
-  io.emit('layer-updated', { mapId: id, layerId, layer: map.layers[layerIndex] });
-  res.json({ success: true, layer: map.layers[layerIndex] });
-});
-
-app.delete('/api/maps/:id/layers/:layerId', (req, res) => {
-  const { id, layerId } = req.params;
-  
-  if (!battlemaps.has(id)) {
-    return res.status(404).json({ error: 'Map not found' });
-  }
-  
-  const map = battlemaps.get(id);
-  const layerIndex = map.layers.findIndex(l => l.id === layerId);
-  
-  if (layerIndex === -1) {
-    return res.status(404).json({ error: 'Layer not found' });
-  }
-  
-  map.layers.splice(layerIndex, 1);
-  battlemaps.set(id, map);
-  
-  io.emit('layer-deleted', { mapId: id, layerId });
-  res.json({ success: true });
-});
-
-app.put('/api/maps/:id/layers/reorder', (req, res) => {
-  const { id } = req.params;
-  const { layerIds } = req.body;
-  
-  if (!battlemaps.has(id)) {
-    return res.status(404).json({ error: 'Map not found' });
-  }
-  
-  const map = battlemaps.get(id);
-  
-  // Validate that all layer IDs exist in the map
-  const existingLayerIds = map.layers.map(l => l.id);
-  const validLayerIds = layerIds.filter(id => existingLayerIds.includes(id));
-  
-  if (validLayerIds.length !== existingLayerIds.length) {
-    return res.status(400).json({ error: 'Invalid layer IDs provided' });
-  }
-  
-  // Reorder layers based on the provided order
-  const reorderedLayers = [];
-  for (const layerId of layerIds) {
-    const layer = map.layers.find(l => l.id === layerId);
-    if (layer) {
-      reorderedLayers.push(layer);
-    }
-  }
-  
-  map.layers = reorderedLayers;
-  battlemaps.set(id, map);
-  
-  // Broadcast the updated map to all clients
-  io.emit('map-updated', { mapId: id, map });
-  
-  res.json({ success: true, map });
-});
-
-app.post('/api/active-map', (req, res) => {
-  const { mapId } = req.body;
-  
-  if (mapId && !battlemaps.has(mapId)) {
-    return res.status(404).json({ error: 'Map not found' });
-  }
-  
-  activeMapId = mapId;
-  io.emit('active-map-changed', { activeMapId });
-  res.json({ success: true, activeMapId });
-});
-
-// Player view control endpoints
-app.get('/api/player-view', (req, res) => {
-  res.json({ success: true, playerView });
-});
-
-app.post('/api/player-view', (req, res) => {
-  const { zoom, pan } = req.body;
-  
-  if (zoom !== undefined) {
-    playerView.zoom = Math.max(0.1, Math.min(5, zoom)); // Clamp zoom between 0.1 and 5
-  }
-  
-  if (pan !== undefined) {
-    playerView.pan = { x: pan.x || 0, y: pan.y || 0 };
-  }
-  
-  // Broadcast the new player view to all clients
-  io.emit('player-view-changed', { playerView });
-  
-  res.json({ success: true, playerView });
-});
-
-app.post('/api/player-view/reset', (req, res) => {
-  playerView = {
-    zoom: 1,
-    pan: { x: 0, y: 0 }
-  };
-  
-  // Broadcast the reset player view to all clients
-  io.emit('player-view-changed', { playerView });
-  
-  res.json({ success: true, playerView });
+app.get('/adventure/:adventureId/player', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'player.html'));
 });
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-  
-  // Send current state to new connections
-  socket.emit('initial-state', {
-    maps: Array.from(battlemaps.values()),
-    activeMapId,
-    playerView
-  });
-  
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
+    console.log('Client connected');
+    
+    // Forward player view updates from DM to all clients
+    socket.on('player-view-updated', (data) => {
+        console.log('Forwarding player view update:', data);
+        // Broadcast to all clients except the sender
+        socket.broadcast.emit('player-view-updated', data);
+    });
+    
+    // Forward active map changes from DM to all clients
+    socket.on('active-map-changed', (data) => {
+        console.log('Forwarding active map change:', data);
+        // Broadcast to all clients except the sender
+        socket.broadcast.emit('active-map-changed', data);
+    });
+    
+    socket.on('disconnect', () => {
+        console.log('Client disconnected');
+    });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`D&D Battlemap server running on port ${PORT}`);
-  console.log(`DM Interface: http://localhost:${PORT}`);
-  console.log(`Player Interface: http://localhost:${PORT}/player`);
+    console.log(`Server running on port ${PORT}`);
 }); 

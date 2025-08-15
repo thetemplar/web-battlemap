@@ -5,6 +5,14 @@ class BattlemapPlayer {
         this.canvas = document.getElementById('playerCanvas');
         this.ctx = this.canvas.getContext('2d');
         
+        // Extract adventure ID from URL
+        this.adventureId = this.extractAdventureIdFromUrl();
+        if (!this.adventureId) {
+            console.error('No adventure ID found in URL');
+            alert('Invalid adventure URL. Please return to the adventure selection page.');
+            return;
+        }
+        
         // State
         this.maps = new Map();
         this.activeMapId = null;
@@ -27,7 +35,39 @@ class BattlemapPlayer {
         this.initializeCanvas();
         this.bindEvents();
         this.setupSocketListeners();
+        this.loadMaps();
         this.updateConnectionStatus();
+    }
+    
+    extractAdventureIdFromUrl() {
+        const pathSegments = window.location.pathname.split('/');
+        const adventureIndex = pathSegments.indexOf('adventure');
+        if (adventureIndex !== -1 && adventureIndex + 1 < pathSegments.length) {
+            return pathSegments[adventureIndex + 1];
+        }
+        return null;
+    }
+    
+    async loadMaps() {
+        try {
+            const response = await fetch(`/api/adventures/${this.adventureId}/maps`);
+            if (response.ok) {
+                const maps = await response.json();
+                this.maps.clear();
+                Object.values(maps).forEach(map => this.maps.set(map.id, map));
+                
+                // Set the first map as active if available
+                if (this.maps.size > 0) {
+                    this.activeMapId = Array.from(this.maps.keys())[0];
+                }
+                
+                this.render();
+            } else {
+                console.error('Failed to load maps');
+            }
+        } catch (error) {
+            console.error('Error loading maps:', error);
+        }
     }
     
     initializeCanvas() {
@@ -64,74 +104,78 @@ class BattlemapPlayer {
             this.showLoadingScreen();
         });
         
-        this.socket.on('initial-state', (data) => {
-            console.log('Player received initial-state:', data);
-            this.maps.clear();
-            data.maps.forEach(map => this.maps.set(map.id, map));
-            this.activeMapId = data.activeMapId;
-            console.log('Player initial activeMapId:', this.activeMapId);
-            
-            // Set initial player view if provided
-            if (data.playerView) {
-                this.zoom = data.playerView.zoom;
-                this.pan = { x: data.playerView.pan.x, y: data.playerView.pan.y };
-                console.log('Initial player view - zoom:', this.zoom, 'pan:', this.pan);
+        // Adventure-scoped map events
+        this.socket.on('map-created', (data) => {
+            if (data.adventureId === this.adventureId) {
+                console.log('Player received map-created:', data);
+                this.maps.set(data.map.id, data.map);
+                if (!this.activeMapId) {
+                    this.activeMapId = data.map.id;
+                }
+                this.render();
             }
-            
-            this.render();
         });
         
         this.socket.on('map-updated', (data) => {
-            console.log('Player received map-updated:', data);
-            
-            // Check if this is a fog update
-            const oldMap = this.maps.get(data.mapId);
-            const isFogUpdate = oldMap && oldMap.fogDataUrl !== data.map.fogDataUrl;
-            
-            // Update the map data
-            this.maps.set(data.mapId, data.map);
-            
-            if (data.mapId === this.activeMapId) {
-                console.log('Updating display for active map');
+            if (data.adventureId === this.adventureId) {
+                console.log('Player received map-updated:', data);
                 
-                if (isFogUpdate) {
-                    console.log('Fog update detected, updating fog smoothly');
-                    // For fog updates, update the fog data but keep the old fog until new one loads
-                    this.updateFogSmoothly(data.map);
-                } else {
-                    // For non-fog updates, render immediately
-                    this.render();
+                // Check if this is a fog update
+                const oldMap = this.maps.get(data.mapId);
+                const isFogUpdate = oldMap && oldMap.fogDataUrl !== data.map.fogDataUrl;
+                
+                // Update the map data
+                this.maps.set(data.mapId, data.map);
+                
+                if (data.mapId === this.activeMapId) {
+                    console.log('Updating display for active map');
+                    
+                    if (isFogUpdate) {
+                        console.log('Fog update detected, updating fog smoothly');
+                        // For fog updates, update the fog data but keep the old fog until new one loads
+                        this.updateFogSmoothly(data.map);
+                    } else {
+                        console.log('Regular map update, re-rendering');
+                        this.render();
+                    }
                 }
             }
         });
         
         this.socket.on('map-deleted', (data) => {
-            console.log('Player received map-deleted:', data);
-            this.maps.delete(data.mapId);
-            this.activeMapId = data.activeMapId;
-            console.log('Player activeMapId after deletion:', this.activeMapId);
-            this.render();
+            if (data.adventureId === this.adventureId) {
+                console.log('Player received map-deleted:', data);
+                this.maps.delete(data.mapId);
+                
+                if (data.mapId === this.activeMapId) {
+                    // Set a new active map if available
+                    const remainingMaps = Array.from(this.maps.keys());
+                    this.activeMapId = remainingMaps.length > 0 ? remainingMaps[0] : null;
+                }
+                
+                this.render();
+            }
         });
         
         this.socket.on('layer-added', (data) => {
-            const map = this.maps.get(data.mapId);
-            if (map) {
-                map.layers.push(data.layer);
-                // Re-render if this is the active map
-                if (data.mapId === this.activeMapId) {
+            if (data.adventureId === this.adventureId && data.mapId === this.activeMapId) {
+                console.log('Player received layer-added:', data);
+                const map = this.maps.get(data.mapId);
+                if (map) {
+                    map.layers.push(data.layer);
                     this.render();
                 }
             }
         });
         
         this.socket.on('layer-updated', (data) => {
-            const map = this.maps.get(data.mapId);
-            if (map) {
-                const layerIndex = map.layers.findIndex(l => l.id === data.layerId);
-                if (layerIndex !== -1) {
-                    map.layers[layerIndex] = data.layer;
-                    // Re-render if this is the active map
-                    if (data.mapId === this.activeMapId) {
+            if (data.adventureId === this.adventureId && data.mapId === this.activeMapId) {
+                console.log('Player received layer-updated:', data);
+                const map = this.maps.get(data.mapId);
+                if (map) {
+                    const layerIndex = map.layers.findIndex(l => l.id === data.layer.id);
+                    if (layerIndex !== -1) {
+                        map.layers[layerIndex] = data.layer;
                         this.render();
                     }
                 }
@@ -139,49 +183,38 @@ class BattlemapPlayer {
         });
         
         this.socket.on('layer-deleted', (data) => {
-            const map = this.maps.get(data.mapId);
-            if (map) {
-                map.layers = map.layers.filter(l => l.id !== data.layerId);
-                // Re-render if this is the active map
-                if (data.mapId === this.activeMapId) {
+            if (data.adventureId === this.adventureId && data.mapId === this.activeMapId) {
+                console.log('Player received layer-deleted:', data);
+                const map = this.maps.get(data.mapId);
+                if (map) {
+                    map.layers = map.layers.filter(l => l.id !== data.layerId);
                     this.render();
                 }
             }
         });
         
-        this.socket.on('active-map-changed', (data) => {
-            console.log('Player received active-map-changed:', data);
-            this.activeMapId = data.activeMapId;
-            console.log('Player activeMapId updated to:', this.activeMapId);
-            
-            // Force a complete refresh when active map changes
-            this.render();
-            
-            // Also clear any cached background images for the new map
-            const newMap = this.maps.get(this.activeMapId);
-            if (newMap && newMap.backgroundImage) {
-                this.backgroundImages.delete(newMap.backgroundImage);
+        this.socket.on('fog-updated', (data) => {
+            if (data.adventureId === this.adventureId && data.mapId === this.activeMapId) {
+                console.log('Player received fog-updated:', data);
+                const map = this.maps.get(data.mapId);
+                if (map) {
+                    // Update fog data and re-render
+                    this.updateFogSmoothly(map);
+                }
             }
         });
         
-        this.socket.on('player-view-changed', (data) => {
-            console.log('Player received player-view-changed:', data);
-            if (data.playerView) {
-                this.zoom = data.playerView.zoom;
-                
-                // Convert from DM's image center coordinates to player's screen pan coordinates
-                const imageCenterX = data.playerView.pan.x;
-                const imageCenterY = data.playerView.pan.y;
-                
-                // Convert to screen pan coordinates (reverse of DM's calculation)
-                const viewportWidth = this.canvas.width / this.zoom;
-                const viewportHeight = this.canvas.height / this.zoom;
-                this.pan.x = -(imageCenterX - viewportWidth / 2) * this.zoom;
-                this.pan.y = -(imageCenterY - viewportHeight / 2) * this.zoom;
-                
-                console.log('Updated player view - zoom:', this.zoom, 'pan:', this.pan);
-                console.log('Converted from image center:', imageCenterX, imageCenterY, 'to screen pan:', this.pan.x, this.pan.y);
-                
+        this.socket.on('player-view-updated', (data) => {
+            if (data.adventureId === this.adventureId && data.mapId === this.activeMapId) {
+                console.log('Player received player-view-updated:', data);
+                this.updatePlayerView(data.zoom, data.pan);
+            }
+        });
+        
+        this.socket.on('active-map-changed', (data) => {
+            if (data.adventureId === this.adventureId) {
+                console.log('Player received active-map-changed:', data);
+                this.activeMapId = data.activeMapId;
                 this.render();
             }
         });
@@ -461,8 +494,46 @@ class BattlemapPlayer {
         document.getElementById('loadingScreen').style.display = 'none';
     }
     
-    hideNoMapScreen() {
-        document.getElementById('noMapScreen').style.display = 'none';
+         hideNoMapScreen() {
+         document.getElementById('noMapScreen').style.display = 'none';
+     }
+     
+     updateConnectionStatus() {
+         // This method is called from constructor but not needed for current implementation
+         // Connection status is handled by socket events
+     }
+     
+     updatePlayerView(zoom, pan) {
+         console.log('Updating player view - zoom:', zoom, 'pan:', pan);
+         
+         // Update zoom and pan
+         this.zoom = zoom;
+         this.pan.x = pan.x;
+         this.pan.y = pan.y;
+         
+         // Re-render with new view
+         this.render();
+     }
+    
+    // Override mouse handlers to disable player control
+    handleMouseDown(e) {
+        // Disable player mouse control - view is controlled by DM
+        e.preventDefault();
+    }
+    
+    handleMouseMove(e) {
+        // Disable player mouse control - view is controlled by DM
+        e.preventDefault();
+    }
+    
+    handleMouseUp(e) {
+        // Disable player mouse control - view is controlled by DM
+        e.preventDefault();
+    }
+    
+    handleWheel(e) {
+        // Disable player wheel control - view is controlled by DM
+        e.preventDefault();
     }
 }
 

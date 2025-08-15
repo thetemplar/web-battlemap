@@ -14,6 +14,14 @@ class BattlemapDM {
         this.canvas = document.getElementById('battlemapCanvas');
         this.ctx = this.canvas.getContext('2d');
         
+        // Extract adventure ID from URL
+        this.adventureId = this.extractAdventureIdFromUrl();
+        if (!this.adventureId) {
+            console.error('No adventure ID found in URL');
+            alert('Invalid adventure URL. Please return to the adventure selection page.');
+            return;
+        }
+        
         // State
         this.maps = new Map();
         this.activeMapId = null; // The map that's active for players
@@ -81,6 +89,15 @@ class BattlemapDM {
         }
     }
     
+    extractAdventureIdFromUrl() {
+        const pathSegments = window.location.pathname.split('/');
+        const adventureIndex = pathSegments.indexOf('adventure');
+        if (adventureIndex !== -1 && adventureIndex + 1 < pathSegments.length) {
+            return pathSegments[adventureIndex + 1];
+        }
+        return null;
+    }
+    
     initialize() {
         this.initializeCanvas();
         this.bindEvents();
@@ -101,6 +118,9 @@ class BattlemapDM {
     }
     
     bindEvents() {
+        // Collapsible section functionality
+        this.setupCollapsibleSections();
+        
         // Debug: Check if fog controls exist
         console.log('=== FOG CONTROLS DEBUG ===');
         console.log('Show everything btn:', document.getElementById('showEverythingBtn'));
@@ -278,7 +298,22 @@ class BattlemapDM {
                 if (playerPanXValue) {
                     playerPanXValue.textContent = `${panX}px`;
                 }
-                this.updatePlayerView({ pan: { x: panX, y: this.currentPlayerPanY } });
+                // Fix: Convert image coordinates to screen coordinates
+                const map = this.maps.get(this.viewingMapId);
+                if (map && map.backgroundImage) {
+                    const bgImage = this.backgroundImages.get(map.backgroundImage);
+                    if (bgImage && bgImage.complete) {
+                        const windowWidth = this.canvas.width;
+                        const screenCenterX = windowWidth / 2;
+                        const scaledImageCenterX = panX * this.currentPlayerZoom;
+                        const correctedPanX = screenCenterX - scaledImageCenterX;
+                        this.updatePlayerView({ pan: { x: correctedPanX, y: this.currentPlayerPanY } });
+                    } else {
+                        this.updatePlayerView({ pan: { x: panX, y: this.currentPlayerPanY } });
+                    }
+                } else {
+                    this.updatePlayerView({ pan: { x: panX, y: this.currentPlayerPanY } });
+                }
             });
         }
         
@@ -290,7 +325,22 @@ class BattlemapDM {
                 if (playerPanYValue) {
                     playerPanYValue.textContent = `${panY}px`;
                 }
-                this.updatePlayerView({ pan: { x: this.currentPlayerPanX, y: panY } });
+                // Fix: Convert image coordinates to screen coordinates
+                const map = this.maps.get(this.viewingMapId);
+                if (map && map.backgroundImage) {
+                    const bgImage = this.backgroundImages.get(map.backgroundImage);
+                    if (bgImage && bgImage.complete) {
+                        const windowHeight = this.canvas.height;
+                        const screenCenterY = windowHeight / 2;
+                        const scaledImageCenterY = panY * this.currentPlayerZoom;
+                        const correctedPanY = screenCenterY - scaledImageCenterY;
+                        this.updatePlayerView({ pan: { x: this.currentPlayerPanX, y: correctedPanY } });
+                    } else {
+                        this.updatePlayerView({ pan: { x: this.currentPlayerPanX, y: panY } });
+                    }
+                } else {
+                    this.updatePlayerView({ pan: { x: this.currentPlayerPanX, y: panY } });
+                }
             });
         }
         
@@ -667,7 +717,7 @@ class BattlemapDM {
     }
     
     addLayer(layerData) {
-        fetch(`/api/maps/${this.viewingMapId}/layers`, {
+        fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}/layers`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(layerData)
@@ -720,7 +770,7 @@ class BattlemapDM {
     saveLayerChanges(layer) {
         if (!this.viewingMapId) return;
         
-        fetch(`/api/maps/${this.viewingMapId}/layers/${layer.id}`, {
+        fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}/layers/${layer.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(layer)
@@ -1140,7 +1190,7 @@ class BattlemapDM {
     createMapWithBackground(name, backgroundImage) {
         console.log('Creating map with background:', { name, backgroundImage });
         
-        fetch('/api/maps', {
+        fetch(`/api/adventures/${this.adventureId}/maps`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, backgroundImage })
@@ -1158,12 +1208,8 @@ class BattlemapDM {
             return response.json();
         }).then(data => {
             console.log('Map creation success data:', data);
-            if (data.success) {
-                this.closeModals();
-                this.loadMaps();
-            } else {
-                console.error('Map creation failed:', data);
-            }
+            this.closeModals();
+            this.loadMaps();
         }).catch(error => {
             console.error('Map creation error:', error);
         });
@@ -1174,7 +1220,7 @@ class BattlemapDM {
             const formData = new FormData();
             formData.append('image', file);
             
-            fetch('/api/upload-image', {
+            fetch('/upload', {
                 method: 'POST',
                 body: formData
             }).then(response => {
@@ -1222,13 +1268,26 @@ class BattlemapDM {
     
     // UI Updates
     loadMaps() {
-        fetch('/api/maps')
+        fetch(`/api/adventures/${this.adventureId}/maps`)
         .then(response => response.json())
-        .then(data => {
+        .then(maps => {
             this.maps.clear();
-            data.maps.forEach(map => this.maps.set(map.id, map));
-            this.activeMapId = data.activeMapId;
-            this.viewingMapId = data.activeMapId; // Set viewing map to active map
+            Object.values(maps).forEach(map => this.maps.set(map.id, map));
+            
+            // Set the first map as active and viewing if no maps are currently set
+            if (this.maps.size > 0) {
+                const firstMapId = Array.from(this.maps.keys())[0];
+                if (!this.activeMapId || !this.maps.has(this.activeMapId)) {
+                    this.activeMapId = firstMapId;
+                }
+                if (!this.viewingMapId || !this.maps.has(this.viewingMapId)) {
+                    this.viewingMapId = firstMapId;
+                }
+            } else {
+                this.activeMapId = null;
+                this.viewingMapId = null;
+            }
+            
             this.updateMapTabs();
             this.render();
             
@@ -1237,6 +1296,9 @@ class BattlemapDM {
             
             // Update pan slider ranges after maps are loaded
             setTimeout(() => this.updatePanSliderRanges(), 100);
+        })
+        .catch(error => {
+            console.error('Error loading maps:', error);
         });
     }
     
@@ -1365,24 +1427,23 @@ class BattlemapDM {
         
         this.updateMapTabs();
         
-        // Send to server
-        fetch('/api/active-map', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mapId })
-        }).then(response => response.json())
-        .then(data => {
-            console.log('Server response for setActiveMap:', data);
-        })
-        .catch(error => {
-            console.error('Error setting active map:', error);
+        // Notify all clients about the active map change
+        this.socket.emit('active-map-changed', {
+            adventureId: this.adventureId,
+            activeMapId: mapId
         });
+        
+        console.log('Active map set to:', mapId);
     }
     
     deleteMap(mapId) {
         if (confirm('Are you sure you want to delete this map?')) {
-            fetch(`/api/maps/${mapId}`, {
+            fetch(`/api/adventures/${this.adventureId}/maps/${mapId}`, {
                 method: 'DELETE'
+            }).then(() => {
+                this.loadMaps();
+            }).catch(error => {
+                console.error('Error deleting map:', error);
             });
         }
     }
@@ -1532,7 +1593,7 @@ class BattlemapDM {
         if (!map) return;
         
         // Send the new layer order to the server
-        fetch(`/api/maps/${this.viewingMapId}/layers/reorder`, {
+        fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}/layers/reorder`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ layerIds: map.layers.map(l => l.id) })
@@ -1554,7 +1615,7 @@ class BattlemapDM {
         const layer = map.layers.find(l => l.id === layerId);
         if (layer) {
             layer.visible = layer.visible === false ? true : false;
-            fetch(`/api/maps/${this.viewingMapId}/layers/${layerId}`, {
+            fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}/layers/${layerId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(layer)
@@ -1573,7 +1634,7 @@ class BattlemapDM {
     
     deleteLayer(layerId) {
         if (confirm('Are you sure you want to delete this layer?')) {
-            fetch(`/api/maps/${this.viewingMapId}/layers/${layerId}`, {
+            fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}/layers/${layerId}`, {
                 method: 'DELETE'
             });
         }
@@ -1623,7 +1684,7 @@ class BattlemapDM {
             const formData = new FormData();
             formData.append('image', file);
             
-            fetch('/api/upload-image', {
+            fetch('/upload', {
                 method: 'POST',
                 body: formData
             }).then(response => {
@@ -1839,34 +1900,70 @@ class BattlemapDM {
         
         const map = this.maps.get(this.viewingMapId);
         if (map) {
-            // Convert fog canvas to compressed data URL
-            const fogDataUrl = this.fogCanvas.toDataURL('image/png', 0.8);
+            // Try multiple compression strategies
+            let fogDataUrl = null;
+            let compressionUsed = 'PNG 0.8';
             
-            console.log('Saving fog state, data URL length:', fogDataUrl.length);
+            // First try: PNG with 0.8 quality
+            fogDataUrl = this.fogCanvas.toDataURL('image/png', 0.8);
+            console.log('Saving fog state, data URL length:', fogDataUrl.length, 'using:', compressionUsed);
             
-            // Check if data is still too large (limit to 10MB)
-            if (fogDataUrl.length > 10 * 1024 * 1024) {
-                console.warn('Fog data is very large, trying higher compression...');
-                const compressedDataUrl = this.fogCanvas.toDataURL('image/jpeg', 0.5);
-                console.log('Compressed data URL length:', compressedDataUrl.length);
-                
-                if (compressedDataUrl.length > 10 * 1024 * 1024) {
-                    console.error('Fog data still too large, cannot save');
-                    return;
-                }
-                
-                // Use the more compressed version
-                this.sendFogData(compressedDataUrl);
-            } else {
-                this.sendFogData(fogDataUrl);
+            // If too large, try JPEG with 0.7 quality
+            if (fogDataUrl.length > 5 * 1024 * 1024) { // 5MB limit
+                console.warn('Fog data too large, trying JPEG compression...');
+                fogDataUrl = this.fogCanvas.toDataURL('image/jpeg', 0.7);
+                compressionUsed = 'JPEG 0.7';
+                console.log('JPEG compressed data URL length:', fogDataUrl.length);
             }
+            
+            // If still too large, try JPEG with 0.5 quality
+            if (fogDataUrl.length > 5 * 1024 * 1024) {
+                console.warn('Fog data still too large, trying higher JPEG compression...');
+                fogDataUrl = this.fogCanvas.toDataURL('image/jpeg', 0.5);
+                compressionUsed = 'JPEG 0.5';
+                console.log('Higher JPEG compressed data URL length:', fogDataUrl.length);
+            }
+            
+            // If still too large, try downsampling the canvas
+            if (fogDataUrl.length > 5 * 1024 * 1024) {
+                console.warn('Fog data still too large, trying downsampling...');
+                fogDataUrl = this.createDownsampledFogData();
+                compressionUsed = 'Downsampled JPEG 0.5';
+                console.log('Downsampled data URL length:', fogDataUrl.length);
+            }
+            
+            // Final check - if still too large, we can't save
+            if (fogDataUrl.length > 10 * 1024 * 1024) {
+                console.error('Fog data still too large after all compression attempts, cannot save');
+                return;
+            }
+            
+            console.log('Using compression:', compressionUsed, 'final size:', fogDataUrl.length);
+            this.sendFogData(fogDataUrl);
         }
+    }
+    
+    createDownsampledFogData() {
+        // Create a temporary canvas with reduced resolution
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        // Calculate downsampling factor (reduce by 2x)
+        const scaleFactor = 0.5;
+        tempCanvas.width = this.fogCanvas.width * scaleFactor;
+        tempCanvas.height = this.fogCanvas.height * scaleFactor;
+        
+        // Draw the fog canvas onto the temp canvas with scaling
+        tempCtx.drawImage(this.fogCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
+        
+        // Return compressed data URL
+        return tempCanvas.toDataURL('image/jpeg', 0.5);
     }
     
     sendFogData(fogDataUrl) {
         console.log('Sending fog data to server, length:', fogDataUrl.length);
         
-        fetch(`/api/maps/${this.viewingMapId}`, {
+        fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fogDataUrl: fogDataUrl })
@@ -2010,20 +2107,17 @@ class BattlemapDM {
             this.currentPlayerPanY = pan.y;
         }
         
-        // Send update to server
-        fetch('/api/player-view', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                zoom: this.currentPlayerZoom,
-                pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
-            })
-        }).then(response => response.json())
-        .then(data => {
-            console.log('Player view updated:', data);
-        })
-        .catch(error => {
-            console.error('Error updating player view:', error);
+        // Emit player view update to all connected clients
+        this.socket.emit('player-view-updated', {
+            adventureId: this.adventureId,
+            mapId: this.viewingMapId,
+            zoom: this.currentPlayerZoom,
+            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
+        });
+        
+        console.log('Player view updated:', {
+            zoom: this.currentPlayerZoom,
+            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
         });
     }
     
@@ -2052,40 +2146,51 @@ class BattlemapDM {
         const zoomY = (windowHeight * 0.9) / imageHeight; // 90% of window height
         const fitZoom = Math.min(zoomX, zoomY, 1); // Don't zoom in beyond 100%
         
-        // Center the image (image center coordinates)
-        const centerX = imageWidth / 2;
-        const centerY = imageHeight / 2;
+        // Center the image in screen coordinates
+        // Calculate where the image center should be positioned on screen
+        const imageCenterX = imageWidth / 2;
+        const imageCenterY = imageHeight / 2;
+        
+        // Convert image center to screen coordinates
+        // Screen center minus the scaled image center position
+        const screenCenterX = windowWidth / 2;
+        const screenCenterY = windowHeight / 2;
+        const scaledImageCenterX = imageCenterX * fitZoom;
+        const scaledImageCenterY = imageCenterY * fitZoom;
+        
+        const panX = screenCenterX - scaledImageCenterX;
+        const panY = screenCenterY - scaledImageCenterY;
         
         console.log('=== RESET PLAYER VIEW ===');
         console.log('Image dimensions:', imageWidth, 'x', imageHeight);
         console.log('Window dimensions:', windowWidth, 'x', windowHeight);
         console.log('Calculated fit zoom:', fitZoom);
-        console.log('Image center coordinates:', centerX, centerY);
+        console.log('Image center coordinates:', imageCenterX, imageCenterY);
+        console.log('Screen center coordinates:', screenCenterX, screenCenterY);
+        console.log('Scaled image center coordinates:', scaledImageCenterX, scaledImageCenterY);
+        console.log('Calculated pan coordinates:', panX, panY);
         
         // Set player view to centered and fitted
         this.currentPlayerZoom = fitZoom;
-        this.currentPlayerPanX = centerX;
-        this.currentPlayerPanY = centerY;
+        this.currentPlayerPanX = panX;
+        this.currentPlayerPanY = panY;
         
         console.log('Player view reset to - zoom:', this.currentPlayerZoom, 'centerX:', this.currentPlayerPanX, 'centerY:', this.currentPlayerPanY);
         
         // Update UI
         this.updatePlayerViewUI();
         
-        // Send reset to server
-        fetch('/api/player-view', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                zoom: this.currentPlayerZoom,
-                pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
-            })
-        }).then(response => response.json())
-        .then(data => {
-            console.log('Player view reset:', data);
-        })
-        .catch(error => {
-            console.error('Error resetting player view:', error);
+        // Emit player view update
+        this.socket.emit('player-view-updated', {
+            adventureId: this.adventureId,
+            mapId: this.viewingMapId,
+            zoom: this.currentPlayerZoom,
+            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
+        });
+        
+        console.log('Player view reset:', {
+            zoom: this.currentPlayerZoom,
+            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
         });
     }
     
@@ -2121,12 +2226,28 @@ class BattlemapDM {
         
         console.log('Clamped center coordinates:', clampedCenterX, clampedCenterY);
         
-        // Sync player view to the center coordinates
-        this.currentPlayerZoom = this.zoom;
-        this.currentPlayerPanX = clampedCenterX;
-        this.currentPlayerPanY = clampedCenterY;
+        // Convert image center coordinates to screen coordinates (same logic as resetPlayerView)
+        const windowWidth = this.canvas.width;
+        const windowHeight = this.canvas.height;
+        const screenCenterXWindow = windowWidth / 2;
+        const screenCenterYWindow = windowHeight / 2;
+        const scaledImageCenterX = clampedCenterX * this.zoom;
+        const scaledImageCenterY = clampedCenterY * this.zoom;
         
-        console.log('Player view set to - zoom:', this.currentPlayerZoom, 'centerX:', this.currentPlayerPanX, 'centerY:', this.currentPlayerPanY);
+        const panX = screenCenterXWindow - scaledImageCenterX;
+        const panY = screenCenterYWindow - scaledImageCenterY;
+        
+        console.log('Window dimensions:', windowWidth, 'x', windowHeight);
+        console.log('Screen center coordinates:', screenCenterXWindow, screenCenterYWindow);
+        console.log('Scaled image center coordinates:', scaledImageCenterX, scaledImageCenterY);
+        console.log('Calculated pan coordinates:', panX, panY);
+        
+        // Sync player view to the center coordinates (in screen coordinates)
+        this.currentPlayerZoom = this.zoom;
+        this.currentPlayerPanX = panX;
+        this.currentPlayerPanY = panY;
+        
+        console.log('Player view set to - zoom:', this.currentPlayerZoom, 'panX:', this.currentPlayerPanX, 'panY:', this.currentPlayerPanY);
         
         // Update UI
         this.updatePlayerViewUI();
@@ -2157,18 +2278,41 @@ class BattlemapDM {
         // Update pan slider ranges based on actual dimensions
         this.updatePanSliderRanges();
         
+        // Convert screen coordinates back to image coordinates for display
+        const map = this.maps.get(this.viewingMapId);
+        let displayPanX = this.currentPlayerPanX;
+        let displayPanY = this.currentPlayerPanY;
+        
+        if (map && map.backgroundImage) {
+            const bgImage = this.backgroundImages.get(map.backgroundImage);
+            if (bgImage && bgImage.complete) {
+                const windowWidth = this.canvas.width;
+                const windowHeight = this.canvas.height;
+                const screenCenterX = windowWidth / 2;
+                const screenCenterY = windowHeight / 2;
+                
+                // Convert screen pan coordinates back to image coordinates
+                displayPanX = Math.round((screenCenterX - this.currentPlayerPanX) / this.currentPlayerZoom);
+                displayPanY = Math.round((screenCenterY - this.currentPlayerPanY) / this.currentPlayerZoom);
+                
+                // Clamp to image bounds
+                displayPanX = Math.max(0, Math.min(bgImage.width, displayPanX));
+                displayPanY = Math.max(0, Math.min(bgImage.height, displayPanY));
+            }
+        }
+        
         if (playerPanXSlider) {
-            playerPanXSlider.value = this.currentPlayerPanX;
+            playerPanXSlider.value = displayPanX;
         }
         if (playerPanXValue) {
-            playerPanXValue.textContent = `${this.currentPlayerPanX}px`;
+            playerPanXValue.textContent = `${displayPanX}px`;
         }
         
         if (playerPanYSlider) {
-            playerPanYSlider.value = this.currentPlayerPanY;
+            playerPanYSlider.value = displayPanY;
         }
         if (playerPanYValue) {
-            playerPanYValue.textContent = `${this.currentPlayerPanY}px`;
+            playerPanYValue.textContent = `${displayPanY}px`;
         }
     }
     
@@ -2203,19 +2347,46 @@ class BattlemapDM {
     }
     
     loadPlayerViewState() {
-        // Load current player view state from server
-        fetch('/api/player-view')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.playerView) {
-                this.currentPlayerZoom = data.playerView.zoom;
-                this.currentPlayerPanX = data.playerView.pan.x;
-                this.currentPlayerPanY = data.playerView.pan.y;
-                this.updatePlayerViewUI();
-            }
-        })
-        .catch(error => {
-            console.error('Error loading player view state:', error);
+        // Player view state is now handled locally per adventure
+        // Initialize with default values
+        this.currentPlayerZoom = 1;
+        this.currentPlayerPanX = 0;
+        this.currentPlayerPanY = 0;
+        this.updatePlayerViewUI();
+    }
+    
+    setupCollapsibleSections() {
+        // Add click handlers for section headers
+        document.querySelectorAll('.section-header').forEach(header => {
+            header.addEventListener('click', (e) => {
+                // Don't trigger if clicking on buttons inside the header
+                if (e.target.closest('button')) return;
+                
+                const sectionId = header.dataset.section;
+                const content = document.getElementById(`${sectionId}-content`);
+                
+                if (content) {
+                    const isCollapsed = content.classList.contains('collapsed');
+                    
+                    if (isCollapsed) {
+                        // Expand
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    } else {
+                        // Collapse
+                        content.classList.add('collapsed');
+                        header.classList.add('collapsed');
+                    }
+                }
+            });
+        });
+        
+        // Initialize all sections as expanded by default
+        document.querySelectorAll('.section-content').forEach(content => {
+            content.classList.remove('collapsed');
+        });
+        document.querySelectorAll('.section-header').forEach(header => {
+            header.classList.remove('collapsed');
         });
     }
 }

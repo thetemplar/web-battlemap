@@ -52,8 +52,51 @@ body {
 }
 
 .sidebar-section {
-    padding: 15px;
     border-bottom: 1px solid #444;
+}
+
+/* Collapsible section styles */
+.section-header {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    margin: 0;
+    background: #3a3a3a;
+    border-bottom: 1px solid #444;
+    transition: background-color 0.2s ease;
+    color: #ffd700;
+    font-size: 1.1rem;
+}
+
+.section-header:hover {
+    background: #4a4a4a;
+}
+
+.section-toggle {
+    transition: transform 0.2s ease;
+    font-size: 0.8em;
+    color: #888;
+}
+
+.section-header.collapsed .section-toggle {
+    transform: rotate(-90deg);
+}
+
+.section-content {
+    padding: 15px;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    max-height: 1000px;
+    opacity: 1;
+}
+
+.section-content.collapsed {
+    max-height: 0;
+    opacity: 0;
+    padding: 0;
 }
 
 .sidebar-section h3 {
@@ -760,4 +803,194 @@ canvas {
     flex: 1;
     font-size: 12px;
     padding: 6px 8px;
-} 
+}
+
+/* Adventure Selection Styles */
+.adventure-selection-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    padding: 20px;
+}
+
+.adventure-header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.adventure-header h1 {
+    color: #ffd700;
+    font-size: 3rem;
+    margin-bottom: 10px;
+}
+
+.adventure-header p {
+    color: #ccc;
+    font-size: 1.2rem;
+}
+
+.adventure-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+}
+
+.adventure-section {
+    background: #2d2d2d;
+    border-radius: 8px;
+    padding: 30px;
+    border: 1px solid #444;
+}
+
+.adventure-section h2 {
+    color: #ffd700;
+    margin-bottom: 20px;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.adventure-list {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.adventure-item {
+    background: #3d3d3d;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 15px;
+    transition: all 0.2s ease;
+}
+
+.adventure-item:hover {
+    background: #4d4d4d;
+    border-color: #666;
+}
+
+.adventure-info {
+    margin-bottom: 15px;
+}
+
+.adventure-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.adventure-header h3 {
+    color: #fff;
+    font-size: 1.2rem;
+    margin: 0;
+}
+
+.adventure-header i {
+    color: #ffd700;
+    font-size: 1.1rem;
+}
+
+.adventure-description {
+    color: #ccc;
+    margin-bottom: 10px;
+    font-style: italic;
+}
+
+.adventure-meta {
+    color: #888;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.adventure-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.adventure-actions .btn {
+    flex: 1;
+    min-width: 80px;
+}
+
+.no-adventures {
+    text-align: center;
+    color: #888;
+    padding: 40px 20px;
+}
+
+.no-adventures i {
+    font-size: 3rem;
+    margin-bottom: 20px;
+    color: #555;
+}
+
+.loading-message {
+    text-align: center;
+    color: #888;
+    padding: 20px;
+}
+
+.loading-message i {
+    margin-right: 10px;
+}
+
+.create-adventure-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.create-adventure-form .form-group {
+    margin-bottom: 0;
+}
+
+.create-adventure-form textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #3d3d3d;
+    color: white;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+}
+
+.create-adventure-form textarea:focus {
+    outline: none;
+    border-color: #007bff;
+}
+
+.create-adventure-form small {
+    color: #888;
+    font-size: 0.8rem;
+    margin-top: 5px;
+    display: block;
+}
+
+/* Responsive Design for Adventure Selection */
+@media (max-width: 768px) {
+    .adventure-content {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .adventure-header h1 {
+        font-size: 2rem;
+    }
+    
+    .adventure-actions {
+        flex-direction: column;
+    }
+    
+    .adventure-actions .btn {
+        flex: none;
+    }
+}
