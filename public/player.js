@@ -31,6 +31,10 @@ class BattlemapPlayer {
         this.fogImageMapId = null;
         this.fogImageDataUrl = null;
         
+        // Players state
+        this.players = new Map(); // Map of playerId -> playerData
+        this.currentActivePlayerId = null;
+        
         // Initialize
         this.initializeCanvas();
         this.bindEvents();
@@ -80,6 +84,7 @@ class BattlemapPlayer {
         this.canvas.width = container.clientWidth;
         this.canvas.height = container.clientHeight;
         this.render();
+        this.updatePlayerNamesOverlay();
     }
     
     bindEvents() {
@@ -218,58 +223,38 @@ class BattlemapPlayer {
                 this.render();
             }
         });
+        
+        this.socket.on('players-updated', (data) => {
+            if (data.adventureId === this.adventureId) {
+                console.log('Player received players-updated:', data);
+                this.players.clear();
+                data.players.forEach(player => {
+                    this.players.set(player.id, player);
+                });
+                this.currentActivePlayerId = data.currentActivePlayerId || null;
+                this.updatePlayerNamesOverlay();
+            }
+        });
     }
     
     handleMouseDown(e) {
-        if (e.button === 0) { // Left click only
-            this.isDragging = true;
-            const rect = this.canvas.getBoundingClientRect();
-            
-            // Store the offset from mouse to current pan position (screen coordinates)
-            this.dragStart = { 
-                x: e.clientX - rect.left - this.pan.x, 
-                y: e.clientY - rect.top - this.pan.y 
-            };
-            
-            this.canvas.style.cursor = 'grabbing';
-        }
+        // Disable player mouse control - view is controlled by DM
+        e.preventDefault();
     }
     
     handleMouseMove(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const mouseScreenX = e.clientX - rect.left;
-        const mouseScreenY = e.clientY - rect.top;
-        
-        if (this.isDragging) {
-            // Update pan in screen coordinates (same as DM)
-            this.pan.x = mouseScreenX - this.dragStart.x;
-            this.pan.y = mouseScreenY - this.dragStart.y;
-            
-            this.render();
-        }
+        // Disable player mouse control - view is controlled by DM
+        e.preventDefault();
     }
     
     handleMouseUp(e) {
-        this.isDragging = false;
-        this.canvas.style.cursor = 'grab';
+        // Disable player mouse control - view is controlled by DM
+        e.preventDefault();
     }
     
     handleWheel(e) {
+        // Disable player wheel control - view is controlled by DM
         e.preventDefault();
-        
-        const rect = this.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        
-        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-        const newZoom = Math.max(0.1, Math.min(5, this.zoom * zoomFactor));
-        
-        // Zoom towards mouse position (same as DM)
-        this.pan.x = mouseX - (mouseX - this.pan.x) * (newZoom / this.zoom);
-        this.pan.y = mouseY - (mouseY - this.pan.y) * (newZoom / this.zoom);
-        
-        this.zoom = newZoom;
-        this.render();
     }
     
     render() {
@@ -503,38 +488,101 @@ class BattlemapPlayer {
          // Connection status is handled by socket events
      }
      
-     updatePlayerView(zoom, pan) {
-         console.log('Updating player view - zoom:', zoom, 'pan:', pan);
-         
-         // Update zoom and pan
-         this.zoom = zoom;
-         this.pan.x = pan.x;
-         this.pan.y = pan.y;
-         
-         // Re-render with new view
-         this.render();
-     }
-    
-    // Override mouse handlers to disable player control
-    handleMouseDown(e) {
-        // Disable player mouse control - view is controlled by DM
-        e.preventDefault();
+         updatePlayerView(zoom, pan) {
+        console.log('Updating player view - zoom:', zoom, 'pan:', pan);
+        
+        // Update zoom and pan
+        this.zoom = zoom;
+        this.pan.x = pan.x;
+        this.pan.y = pan.y;
+        
+        // Re-render with new view
+        this.render();
     }
     
-    handleMouseMove(e) {
-        // Disable player mouse control - view is controlled by DM
-        e.preventDefault();
+    updatePlayerNamesOverlay() {
+        const overlay = document.getElementById('playerNamesOverlay');
+        if (!overlay) {
+            console.error('Player names overlay not found');
+            return;
+        }
+        
+        console.log('Updating player names overlay. Players count:', this.players.size);
+        
+        // Clear existing player name tags
+        overlay.innerHTML = '';
+        
+        // Calculate screen dimensions
+        const screenWidth = this.canvas.width;
+        const screenHeight = this.canvas.height;
+        
+        console.log('Screen dimensions:', screenWidth, 'x', screenHeight);
+        
+        this.players.forEach((player, playerId) => {
+            console.log('Creating name tag for player:', player.name, 'at orientation:', player.orientation);
+            
+            // Determine which border the player should be on based on orientation
+            let x, y;
+            let borderClass = '';
+            let rotation = 0;
+            
+                         // Convert orientation to border position (like a poker table)
+             // 0-90 degrees: top border (facing down/out - away from screen)
+             // 90-180 degrees: right border (facing left/out - away from screen)
+             // 180-270 degrees: bottom border (facing up/out - away from screen)
+             // 270-360 degrees: left border (facing right/out - away from screen)
+             
+             if (player.orientation >= 0 && player.orientation < 90) {
+                 // Top border (0-90 degrees) - facing down/out (away from screen)
+                 const progress = player.orientation / 90; // 0 to 1
+                 x = progress * screenWidth;
+                 y = 30; // 30px from top (center of 60px border)
+                 borderClass = 'border-top';
+                 rotation = 180; // Face down/out (away from screen)
+             } else if (player.orientation >= 90 && player.orientation < 180) {
+                 // Right border (90-180 degrees) - facing left/out (away from screen)
+                 const progress = (player.orientation - 90) / 90; // 0 to 1
+                 x = screenWidth - 30; // 30px from right (center of 60px border)
+                 y = progress * screenHeight;
+                 borderClass = 'border-right';
+                 rotation = 270; // Face left/out (away from screen)
+             } else if (player.orientation >= 180 && player.orientation < 270) {
+                 // Bottom border (180-270 degrees) - facing up/out (away from screen)
+                 const progress = (player.orientation - 180) / 90; // 0 to 1
+                 x = screenWidth - (progress * screenWidth); // Reverse direction
+                 y = screenHeight - 30; // 30px from bottom (center of 60px border)
+                 borderClass = 'border-bottom';
+                 rotation = 0; // Face up/out (away from screen)
+             } else {
+                 // Left border (270-360 degrees) - facing right/out (away from screen)
+                 const progress = (player.orientation - 270) / 90; // 0 to 1
+                 x = 30; // 30px from left (center of 60px border)
+                 y = screenHeight - (progress * screenHeight); // Reverse direction
+                 borderClass = 'border-left';
+                 rotation = 90; // Face right/out (away from screen)
+             }
+            
+            console.log('Calculated position:', x, y, 'border:', borderClass, 'rotation:', rotation);
+            
+            // Create player name tag
+            const nameTag = document.createElement('div');
+            nameTag.className = `player-name-tag ${borderClass}`;
+            
+            // Add active class if this is the current active player
+            if (playerId === this.currentActivePlayerId) {
+                nameTag.classList.add('active');
+            }
+            
+            nameTag.textContent = player.name;
+            nameTag.style.left = `${x}px`;
+            nameTag.style.top = `${y}px`;
+            nameTag.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
+            
+            overlay.appendChild(nameTag);
+            console.log('Added name tag for:', player.name, playerId === this.currentActivePlayerId ? '(ACTIVE)' : '');
+        });
     }
     
-    handleMouseUp(e) {
-        // Disable player mouse control - view is controlled by DM
-        e.preventDefault();
-    }
-    
-    handleWheel(e) {
-        // Disable player wheel control - view is controlled by DM
-        e.preventDefault();
-    }
 }
 
 // Initialize the player interface

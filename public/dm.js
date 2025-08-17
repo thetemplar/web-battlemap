@@ -81,6 +81,10 @@ class BattlemapDM {
         this.draggedLayerItem = null;
         this.dragPlaceholder = null;
         
+        // Players management state
+        this.players = new Map(); // Map of playerId -> playerData
+        this.currentActivePlayerId = null;
+        
         // Initialize after DOM is ready
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => this.initialize());
@@ -103,6 +107,7 @@ class BattlemapDM {
         this.bindEvents();
         this.setupSocketListeners();
         this.loadMaps();
+        this.loadPlayers();
     }
     
     initializeCanvas() {
@@ -352,6 +357,37 @@ class BattlemapDM {
         const syncPlayerViewBtn = document.getElementById('syncPlayerViewBtn');
         if (syncPlayerViewBtn) {
             syncPlayerViewBtn.addEventListener('click', () => this.syncPlayerViewToDM());
+        }
+        
+        // Players management event handlers
+        const addPlayerBtn = document.getElementById('addPlayerBtn');
+        if (addPlayerBtn) {
+            addPlayerBtn.addEventListener('click', () => this.addPlayer());
+        }
+        
+        const playerOrientationSlider = document.getElementById('playerOrientation');
+        if (playerOrientationSlider) {
+            playerOrientationSlider.addEventListener('input', (e) => {
+                const orientationValue = document.getElementById('playerOrientationValue');
+                if (orientationValue) {
+                    orientationValue.textContent = `${e.target.value}°`;
+                }
+            });
+        }
+
+        const playerInitiativeInput = document.getElementById('playerInitiative');
+        if (playerInitiativeInput) {
+            playerInitiativeInput.addEventListener('input', (e) => {
+                // Limit to 2 digits
+                if (e.target.value.length > 2) {
+                    e.target.value = e.target.value.slice(0, 2);
+                }
+            });
+        }
+
+        const nextInitBtn = document.getElementById('nextInitBtn');
+        if (nextInitBtn) {
+            nextInitBtn.addEventListener('click', () => this.nextInitiative());
         }
         
         // Modal events
@@ -1644,6 +1680,219 @@ class BattlemapDM {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.style.display = 'none';
         });
+    }
+    
+    // Players Management Methods
+    addPlayer() {
+        const playerNameInput = document.getElementById('playerName');
+        const playerOrientationInput = document.getElementById('playerOrientation');
+        const playerInitiativeInput = document.getElementById('playerInitiative');
+        
+        const name = playerNameInput.value.trim();
+        const orientation = parseInt(playerOrientationInput.value);
+        const initiative = parseInt(playerInitiativeInput.value) || 0;
+        
+        if (!name) {
+            alert('Please enter a player name');
+            return;
+        }
+        
+        // Check if player name already exists
+        for (const player of this.players.values()) {
+            if (player.name.toLowerCase() === name.toLowerCase()) {
+                alert('A player with this name already exists');
+                return;
+            }
+        }
+        
+        const playerId = uuidv4();
+        const playerData = {
+            id: playerId,
+            name: name,
+            orientation: orientation,
+            initiative: initiative
+        };
+        
+        this.players.set(playerId, playerData);
+        this.updatePlayersList();
+        
+        // Clear the form
+        playerNameInput.value = '';
+        playerOrientationInput.value = 0;
+        playerInitiativeInput.value = '';
+        document.getElementById('playerOrientationValue').textContent = '0°';
+        
+        // Save players to server
+        this.savePlayers();
+    }
+    
+    deletePlayer(playerId) {
+        if (confirm('Are you sure you want to delete this player?')) {
+            this.players.delete(playerId);
+            this.updatePlayersList();
+            this.savePlayers();
+        }
+    }
+    
+    updatePlayersList() {
+        const container = document.getElementById('playersList');
+        container.innerHTML = '';
+        
+        // Sort players by initiative (descending)
+        const sortedPlayers = Array.from(this.players.values()).sort((a, b) => b.initiative - a.initiative);
+        
+        sortedPlayers.forEach(player => {
+            const item = document.createElement('div');
+            item.className = 'player-item';
+            
+            // Add active class if this is the current active player
+            if (player.id === this.currentActivePlayerId) {
+                item.classList.add('active');
+            }
+            
+            item.innerHTML = `
+                <div class="player-info">
+                    <span class="player-name">${player.name}</span>
+                    <span class="player-orientation">${player.orientation}°</span>
+                    <input type="number" 
+                           class="player-initiative" 
+                           value="${player.initiative}" 
+                           min="0" 
+                           max="99" 
+                           onchange="battlemapDM.updatePlayerInitiative('${player.id}', this.value)"
+                           title="Initiative">
+                </div>
+                <div class="player-actions">
+                    <button onclick="battlemapDM.editPlayer('${player.id}')" title="Edit Player" class="edit-btn">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button onclick="battlemapDM.deletePlayer('${player.id}')" title="Delete Player" class="delete-btn">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            
+            container.appendChild(item);
+        });
+    }
+    
+    editPlayer(playerId) {
+        const player = this.players.get(playerId);
+        if (!player) return;
+        
+        // Create a simple prompt for editing orientation
+        const newOrientation = prompt(`Edit orientation for ${player.name} (0-360 degrees):`, player.orientation);
+        
+        if (newOrientation !== null) {
+            const orientation = parseInt(newOrientation);
+            if (isNaN(orientation) || orientation < 0 || orientation > 360) {
+                alert('Please enter a valid orientation between 0 and 360 degrees');
+                return;
+            }
+            
+            // Update the player's orientation
+            player.orientation = orientation;
+            this.players.set(playerId, player);
+            this.updatePlayersList();
+            this.savePlayers();
+        }
+    }
+
+    updatePlayerInitiative(playerId, newInitiative) {
+        const player = this.players.get(playerId);
+        if (!player) return;
+        
+        const initiative = parseInt(newInitiative) || 0;
+        if (initiative < 0 || initiative > 99) {
+            alert('Please enter a valid initiative between 0 and 99');
+            return;
+        }
+        
+        player.initiative = initiative;
+        this.players.set(playerId, player);
+        this.updatePlayersList();
+        this.savePlayers();
+    }
+
+    nextInitiative() {
+        if (this.players.size === 0) {
+            alert('No players to cycle through');
+            return;
+        }
+        
+        // Get all players sorted by initiative (descending)
+        const sortedPlayers = Array.from(this.players.values()).sort((a, b) => b.initiative - a.initiative);
+        
+        if (this.currentActivePlayerId === null) {
+            // Start with the first player (highest initiative)
+            this.currentActivePlayerId = sortedPlayers[0].id;
+        } else {
+            // Find current player index
+            const currentIndex = sortedPlayers.findIndex(p => p.id === this.currentActivePlayerId);
+            if (currentIndex === -1) {
+                // Current player not found, start with first
+                this.currentActivePlayerId = sortedPlayers[0].id;
+            } else {
+                // Move to next player (or back to first if at end)
+                const nextIndex = (currentIndex + 1) % sortedPlayers.length;
+                this.currentActivePlayerId = sortedPlayers[nextIndex].id;
+            }
+        }
+        
+        this.updatePlayersList();
+        this.savePlayers();
+    }
+    
+    savePlayers() {
+        // For now, save to localStorage. In a future iteration, this could be saved to the server
+        const playersData = Array.from(this.players.values());
+        const playersState = {
+            players: playersData,
+            currentActivePlayerId: this.currentActivePlayerId
+        };
+        localStorage.setItem(`adventure_${this.adventureId}_players`, JSON.stringify(playersState));
+        
+        // Emit players update to all connected clients
+        this.socket.emit('players-updated', {
+            adventureId: this.adventureId,
+            players: playersData,
+            currentActivePlayerId: this.currentActivePlayerId
+        });
+    }
+    
+    loadPlayers() {
+        // Load players from localStorage
+        const playersData = localStorage.getItem(`adventure_${this.adventureId}_players`);
+        if (playersData) {
+            try {
+                const playersState = JSON.parse(playersData);
+                
+                // Handle both old format (array) and new format (object with players and currentActivePlayerId)
+                let players, currentActivePlayerId;
+                if (Array.isArray(playersState)) {
+                    // Old format - just an array of players
+                    players = playersState;
+                    currentActivePlayerId = null;
+                } else {
+                    // New format - object with players and currentActivePlayerId
+                    players = playersState.players || [];
+                    currentActivePlayerId = playersState.currentActivePlayerId || null;
+                }
+                
+                this.players.clear();
+                players.forEach(player => {
+                    // Ensure initiative exists (for backward compatibility)
+                    if (player.initiative === undefined) {
+                        player.initiative = 0;
+                    }
+                    this.players.set(player.id, player);
+                });
+                this.currentActivePlayerId = currentActivePlayerId;
+                this.updatePlayersList();
+            } catch (error) {
+                console.error('Error loading players:', error);
+            }
+        }
     }
     
     // Image Upload Modal

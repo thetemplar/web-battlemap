@@ -431,6 +431,13 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('active-map-changed', data);
     });
     
+    // Forward players updates from DM to all clients
+    socket.on('players-updated', (data) => {
+        console.log('Forwarding players update:', data);
+        // Broadcast to all clients except the sender
+        socket.broadcast.emit('players-updated', data);
+    });
+    
     socket.on('disconnect', () => {
         console.log('Client disconnected');
     });
