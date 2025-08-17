@@ -18,6 +18,8 @@ RUN sed -i "s/BUILD_TIMESTAMP/$(date '+%Y-%m-%d %H:%M')/g" public/dm.html public
 
 # Create uploads directory
 RUN mkdir -p uploads
+RUN mkdir -p tokens
+RUN mkdir -p maps
 
 # Expose port
 EXPOSE 3000

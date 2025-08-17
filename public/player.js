@@ -34,6 +34,7 @@ class BattlemapPlayer {
         // Players state
         this.players = new Map(); // Map of playerId -> playerData
         this.currentActivePlayerId = null;
+        this.playerNameFontSize = 14; // Default font size for player names
         
         // Initialize
         this.initializeCanvas();
@@ -212,7 +213,7 @@ class BattlemapPlayer {
         this.socket.on('player-view-updated', (data) => {
             if (data.adventureId === this.adventureId && data.mapId === this.activeMapId) {
                 console.log('Player received player-view-updated:', data);
-                this.updatePlayerView(data.zoom, data.pan);
+                this.updatePlayerView(data.zoom, data.pan, data.fontSize);
             }
         });
         
@@ -488,13 +489,18 @@ class BattlemapPlayer {
          // Connection status is handled by socket events
      }
      
-         updatePlayerView(zoom, pan) {
-        console.log('Updating player view - zoom:', zoom, 'pan:', pan);
+         updatePlayerView(zoom, pan, fontSize) {
+        console.log('Updating player view - zoom:', zoom, 'pan:', pan, 'fontSize:', fontSize);
         
         // Update zoom and pan
         this.zoom = zoom;
         this.pan.x = pan.x;
         this.pan.y = pan.y;
+        
+        // Update font size if provided
+        if (fontSize !== undefined) {
+            this.playerNameFontSize = fontSize;
+        }
         
         // Re-render with new view
         this.render();
@@ -518,7 +524,20 @@ class BattlemapPlayer {
         
         console.log('Screen dimensions:', screenWidth, 'x', screenHeight);
         
-        this.players.forEach((player, playerId) => {
+        // Get sorted players by initiative (descending)
+        const sortedPlayers = Array.from(this.players.entries()).sort((a, b) => b[1].initiative - a[1].initiative);
+        
+        // Find the next player (the one after the current active player)
+        let nextPlayerId = null;
+        if (this.currentActivePlayerId && sortedPlayers.length > 1) {
+            const currentIndex = sortedPlayers.findIndex(([id]) => id === this.currentActivePlayerId);
+            if (currentIndex !== -1) {
+                const nextIndex = (currentIndex + 1) % sortedPlayers.length;
+                nextPlayerId = sortedPlayers[nextIndex][0];
+            }
+        }
+        
+        sortedPlayers.forEach(([playerId, player]) => {
             console.log('Creating name tag for player:', player.name, 'at orientation:', player.orientation);
             
             // Determine which border the player should be on based on orientation
@@ -526,41 +545,41 @@ class BattlemapPlayer {
             let borderClass = '';
             let rotation = 0;
             
-                         // Convert orientation to border position (like a poker table)
-             // 0-90 degrees: top border (facing down/out - away from screen)
-             // 90-180 degrees: right border (facing left/out - away from screen)
-             // 180-270 degrees: bottom border (facing up/out - away from screen)
-             // 270-360 degrees: left border (facing right/out - away from screen)
-             
-             if (player.orientation >= 0 && player.orientation < 90) {
-                 // Top border (0-90 degrees) - facing down/out (away from screen)
-                 const progress = player.orientation / 90; // 0 to 1
-                 x = progress * screenWidth;
-                 y = 30; // 30px from top (center of 60px border)
-                 borderClass = 'border-top';
-                 rotation = 180; // Face down/out (away from screen)
-             } else if (player.orientation >= 90 && player.orientation < 180) {
-                 // Right border (90-180 degrees) - facing left/out (away from screen)
-                 const progress = (player.orientation - 90) / 90; // 0 to 1
-                 x = screenWidth - 30; // 30px from right (center of 60px border)
-                 y = progress * screenHeight;
-                 borderClass = 'border-right';
-                 rotation = 270; // Face left/out (away from screen)
-             } else if (player.orientation >= 180 && player.orientation < 270) {
-                 // Bottom border (180-270 degrees) - facing up/out (away from screen)
-                 const progress = (player.orientation - 180) / 90; // 0 to 1
-                 x = screenWidth - (progress * screenWidth); // Reverse direction
-                 y = screenHeight - 30; // 30px from bottom (center of 60px border)
-                 borderClass = 'border-bottom';
-                 rotation = 0; // Face up/out (away from screen)
-             } else {
-                 // Left border (270-360 degrees) - facing right/out (away from screen)
-                 const progress = (player.orientation - 270) / 90; // 0 to 1
-                 x = 30; // 30px from left (center of 60px border)
-                 y = screenHeight - (progress * screenHeight); // Reverse direction
-                 borderClass = 'border-left';
-                 rotation = 90; // Face right/out (away from screen)
-             }
+            // Convert orientation to border position (like a poker table)
+            // 0-90 degrees: top border (facing down/out - away from screen)
+            // 90-180 degrees: right border (facing left/out - away from screen)
+            // 180-270 degrees: bottom border (facing up/out - away from screen)
+            // 270-360 degrees: left border (facing right/out - away from screen)
+            
+            if (player.orientation >= 0 && player.orientation < 90) {
+                // Top border (0-90 degrees) - facing down/out (away from screen)
+                const progress = player.orientation / 90; // 0 to 1
+                x = progress * screenWidth;
+                y = 30; // 30px from top (center of 60px border)
+                borderClass = 'border-top';
+                rotation = 180; // Face down/out (away from screen)
+            } else if (player.orientation >= 90 && player.orientation < 180) {
+                // Right border (90-180 degrees) - facing left/out (away from screen)
+                const progress = (player.orientation - 90) / 90; // 0 to 1
+                x = screenWidth - 30; // 30px from right (center of 60px border)
+                y = progress * screenHeight;
+                borderClass = 'border-right';
+                rotation = 270; // Face left/out (away from screen)
+            } else if (player.orientation >= 180 && player.orientation < 270) {
+                // Bottom border (180-270 degrees) - facing up/out (away from screen)
+                const progress = (player.orientation - 180) / 90; // 0 to 1
+                x = screenWidth - (progress * screenWidth); // Reverse direction
+                y = screenHeight - 30; // 30px from bottom (center of 60px border)
+                borderClass = 'border-bottom';
+                rotation = 0; // Face up/out (away from screen)
+            } else {
+                // Left border (270-360 degrees) - facing right/out (away from screen)
+                const progress = (player.orientation - 270) / 90; // 0 to 1
+                x = 30; // 30px from left (center of 60px border)
+                y = screenHeight - (progress * screenHeight); // Reverse direction
+                borderClass = 'border-left';
+                rotation = 90; // Face right/out (away from screen)
+            }
             
             console.log('Calculated position:', x, y, 'border:', borderClass, 'rotation:', rotation);
             
@@ -572,14 +591,21 @@ class BattlemapPlayer {
             if (playerId === this.currentActivePlayerId) {
                 nameTag.classList.add('active');
             }
+            // Add next class if this is the next player
+            else if (playerId === nextPlayerId) {
+                nameTag.classList.add('next');
+            }
             
             nameTag.textContent = player.name;
             nameTag.style.left = `${x}px`;
             nameTag.style.top = `${y}px`;
+            nameTag.style.fontSize = `${this.playerNameFontSize}px`;
             nameTag.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
             
             overlay.appendChild(nameTag);
-            console.log('Added name tag for:', player.name, playerId === this.currentActivePlayerId ? '(ACTIVE)' : '');
+            console.log('Added name tag for:', player.name, 
+                playerId === this.currentActivePlayerId ? '(ACTIVE)' : 
+                playerId === nextPlayerId ? '(NEXT)' : '');
         });
     }
     

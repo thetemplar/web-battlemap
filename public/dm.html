@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>D&D Battlemap - DM Interface</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="stylesheet" href="/styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
@@ -142,6 +144,11 @@
                             <input type="range" id="playerPanYSlider" min="0" max="2000" value="0">
                             <span id="playerPanYValue">0px</span>
                         </div>
+                        <div class="view-controls">
+                            <label>Player Name Font Size:</label>
+                            <input type="range" id="playerNameFontSizeSlider" min="6" max="60" value="14">
+                            <span id="playerNameFontSizeValue">14px</span>
+                        </div>
                         <div class="view-buttons">
                             <button id="resetPlayerViewBtn" class="btn btn-secondary">
                                 <i class="fas fa-home"></i> Reset View
@@ -215,17 +222,46 @@
     <div id="newMapModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Create New Battlemap</h3>
+                <h3>Map Vault</h3>
                 <span class="close">&times;</span>
             </div>
             <div class="modal-body">
-                <div class="form-group">
-                    <label for="mapName">Map Name:</label>
-                    <input type="text" id="mapName" placeholder="Enter map name">
+                <!-- Map Search Section -->
+                <div class="map-search-section">
+                    <h4><i class="fas fa-search"></i> Search Existing Maps</h4>
+                    <div class="form-group">
+                        <label for="mapSearch">Search by name:</label>
+                        <input type="text" id="mapSearch" placeholder="Enter map name to search...">
+                    </div>
+                    <div id="mapSearchResults" class="map-search-results"></div>
                 </div>
-                <div class="form-group">
-                    <label for="mapBackground">Background Image:</label>
-                    <input type="file" id="mapBackground" accept="image/*">
+                
+                <div class="map-separator">
+                    <span>OR</span>
+                </div>
+                
+                <!-- Map Upload Section -->
+                <div class="map-upload-section">
+                    <h4><i class="fas fa-upload"></i> Upload New Map</h4>
+                    <div class="form-group">
+                        <label for="mapName">Map Name:</label>
+                        <input type="text" id="mapName" placeholder="Enter map name">
+                    </div>
+                    <div class="form-group">
+                        <label for="mapDescription">Description (optional):</label>
+                        <textarea id="mapDescription" placeholder="Enter map description" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="mapBackground">Background Image:</label>
+                        <input type="file" id="mapBackground" accept="image/*">
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="saveMapPermanent">
+                            <span class="checkmark"></span>
+                            Save to Map Vault (permanent)
+                        </label>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -235,28 +271,53 @@
         </div>
     </div>
     
-    <div id="imageUploadModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Upload Token Image</h3>
-                <span class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="tokenImage">Select Image:</label>
-                    <input type="file" id="tokenImage" accept="image/*">
-                </div>
-                <div class="form-group">
-                    <label for="tokenName">Token Name:</label>
-                    <input type="text" id="tokenName" placeholder="Enter token name">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button id="uploadTokenBtn" class="btn btn-primary">Upload Token</button>
-                <button class="btn btn-secondary close-modal">Cancel</button>
-            </div>
-        </div>
-    </div>
+         <div id="imageUploadModal" class="modal">
+         <div class="modal-content">
+             <div class="modal-header">
+                 <h3>Token Vault</h3>
+                 <span class="close">&times;</span>
+             </div>
+             <div class="modal-body">
+                 <!-- Token Search Section -->
+                 <div class="token-search-section">
+                     <h4><i class="fas fa-search"></i> Search Existing Tokens</h4>
+                     <div class="form-group">
+                         <label for="tokenSearch">Search by name:</label>
+                         <input type="text" id="tokenSearch" placeholder="Enter token name to search...">
+                     </div>
+                     <div id="tokenSearchResults" class="token-search-results"></div>
+                 </div>
+                 
+                 <div class="token-separator">
+                     <span>OR</span>
+                 </div>
+                 
+                 <!-- Token Upload Section -->
+                 <div class="token-upload-section">
+                     <h4><i class="fas fa-upload"></i> Upload New Token</h4>
+                     <div class="form-group">
+                         <label for="tokenImage">Select Image:</label>
+                         <input type="file" id="tokenImage" accept="image/*">
+                     </div>
+                     <div class="form-group">
+                         <label for="tokenName">Token Name:</label>
+                         <input type="text" id="tokenName" placeholder="Enter token name">
+                     </div>
+                     <div class="form-group">
+                         <label class="checkbox-label">
+                             <input type="checkbox" id="savePermanent">
+                             <span class="checkmark"></span>
+                             Save to Token Vault (permanent)
+                         </label>
+                     </div>
+                 </div>
+             </div>
+             <div class="modal-footer">
+                 <button id="uploadTokenBtn" class="btn btn-primary">Use Token</button>
+                 <button class="btn btn-secondary close-modal">Cancel</button>
+             </div>
+         </div>
+     </div>
     
     <script src="/socket.io/socket.io.js"></script>
     <script src="/dm.js"></script>

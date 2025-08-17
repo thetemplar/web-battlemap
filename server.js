@@ -35,12 +35,20 @@ const upload = multer({ storage: storage });
 // Ensure directories exist
 const adventuresDir = path.join(__dirname, 'adventures');
 const uploadsDir = path.join(__dirname, 'uploads');
+const tokensDir = path.join(__dirname, 'tokens');
+const mapsDir = path.join(__dirname, 'maps'); // NEW
 
 if (!fs.existsSync(adventuresDir)) {
     fs.mkdirSync(adventuresDir, { recursive: true });
 }
 if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
+}
+if (!fs.existsSync(tokensDir)) {
+    fs.mkdirSync(tokensDir, { recursive: true });
+}
+if (!fs.existsSync(mapsDir)) { // NEW
+    fs.mkdirSync(mapsDir, { recursive: true });
 }
 
 // Adventure management functions
@@ -53,7 +61,22 @@ function loadAdventure(adventureId) {
         const filePath = getAdventurePath(adventureId);
         if (fs.existsSync(filePath)) {
             const data = fs.readFileSync(filePath, 'utf8');
-            return JSON.parse(data);
+            const adventure = JSON.parse(data);
+            
+            // Migrate layers to ensure they all have IDs
+            if (adventure.maps) {
+                Object.values(adventure.maps).forEach(map => {
+                    if (map.layers) {
+                        map.layers.forEach(layer => {
+                            if (!layer.id) {
+                                layer.id = `layer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                            }
+                        });
+                    }
+                });
+            }
+            
+            return adventure;
         }
     } catch (error) {
         console.error(`Error loading adventure ${adventureId}:`, error);
@@ -91,6 +114,118 @@ function getAllAdventures() {
         console.error('Error loading adventures:', error);
     }
     return adventures;
+}
+
+// Token Vault management functions
+function getTokenPath(tokenId) {
+    return path.join(tokensDir, `${tokenId}.json`);
+}
+
+function loadToken(tokenId) {
+    try {
+        const filePath = getTokenPath(tokenId);
+        if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        console.error(`Error loading token ${tokenId}:`, error);
+    }
+    return null;
+}
+
+function saveToken(token) {
+    try {
+        const filePath = getTokenPath(token.id);
+        fs.writeFileSync(filePath, JSON.stringify(token, null, 2));
+        return true;
+    } catch (error) {
+        console.error(`Error saving token ${token.id}:`, error);
+        return false;
+    }
+}
+
+function getAllTokens() {
+    const tokens = [];
+    try {
+        const files = fs.readdirSync(tokensDir);
+        for (const file of files) {
+            if (file.endsWith('.json')) {
+                const tokenId = file.replace('.json', '');
+                const token = loadToken(tokenId);
+                if (token) {
+                    tokens.push(token);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading tokens:', error);
+    }
+    return tokens;
+}
+
+function searchTokens(query) {
+    const allTokens = getAllTokens();
+    const searchTerm = query.toLowerCase();
+    return allTokens.filter(token => 
+        token.name.toLowerCase().includes(searchTerm)
+    );
+}
+
+// Map Vault management functions
+function getMapPath(mapId) {
+    return path.join(mapsDir, `${mapId}.json`);
+}
+
+function loadMap(mapId) {
+    try {
+        const filePath = getMapPath(mapId);
+        if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        console.error(`Error loading map ${mapId}:`, error);
+    }
+    return null;
+}
+
+function saveMap(map) {
+    try {
+        const filePath = getMapPath(map.id);
+        fs.writeFileSync(filePath, JSON.stringify(map, null, 2));
+        return true;
+    } catch (error) {
+        console.error(`Error saving map ${map.id}:`, error);
+        return false;
+    }
+}
+
+function getAllMaps() {
+    const maps = [];
+    try {
+        const files = fs.readdirSync(mapsDir);
+        for (const file of files) {
+            if (file.endsWith('.json')) {
+                const mapId = file.replace('.json', '');
+                const map = loadMap(mapId);
+                if (map) {
+                    maps.push(map);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading maps:', error);
+    }
+    return maps;
+}
+
+function searchMaps(query) {
+    const allMaps = getAllMaps();
+    const searchTerm = query.toLowerCase();
+    return allMaps.filter(map => 
+        map.name.toLowerCase().includes(searchTerm)
+    );
 }
 
 // Adventure API endpoints
@@ -270,6 +405,11 @@ app.post('/api/adventures/:adventureId/maps/:mapId/layers', (req, res) => {
         adventure.maps[mapId].layers = [];
     }
     
+    // Add a unique ID to the layer if it doesn't have one
+    if (!layer.id) {
+        layer.id = `layer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+    
     adventure.maps[mapId].layers.push(layer);
     
     if (saveAdventure(adventure)) {
@@ -277,6 +417,56 @@ app.post('/api/adventures/:adventureId/maps/:mapId/layers', (req, res) => {
         io.emit('layer-added', { adventureId, mapId, layer });
     } else {
         res.status(500).json({ error: 'Failed to add layer' });
+    }
+});
+
+app.put('/api/adventures/:adventureId/maps/:mapId/layers/reorder', (req, res) => {
+    const { adventureId, mapId } = req.params;
+    const { layerIds } = req.body;
+    
+    console.log('Layer reorder request:', { adventureId, mapId, layerIds });
+    
+    const adventure = loadAdventure(adventureId);
+    if (!adventure || !adventure.maps[mapId]) {
+        console.error('Map not found:', { adventureId, mapId });
+        return res.status(404).json({ error: 'Map not found' });
+    }
+    
+    // Validate that all layer IDs exist in the map
+    const existingLayerIds = adventure.maps[mapId].layers.map(l => l.id);
+    console.log('Existing layer IDs:', existingLayerIds);
+    console.log('Requested layer IDs:', layerIds);
+    
+    const validLayerIds = layerIds.filter(id => existingLayerIds.includes(id));
+    console.log('Valid layer IDs:', validLayerIds);
+    
+    if (validLayerIds.length !== existingLayerIds.length) {
+        console.error('Layer ID validation failed:', {
+            validCount: validLayerIds.length,
+            existingCount: existingLayerIds.length,
+            missing: existingLayerIds.filter(id => !layerIds.includes(id))
+        });
+        return res.status(400).json({ error: 'Invalid layer IDs provided' });
+    }
+    
+    // Reorder layers based on the provided order
+    const reorderedLayers = [];
+    for (const layerId of layerIds) {
+        const layer = adventure.maps[mapId].layers.find(l => l.id === layerId);
+        if (layer) {
+            reorderedLayers.push(layer);
+        }
+    }
+    
+    adventure.maps[mapId].layers = reorderedLayers;
+    
+    if (saveAdventure(adventure)) {
+        console.log('Layer reorder successful');
+        res.json({ success: true, map: adventure.maps[mapId] });
+        io.emit('map-updated', { adventureId, mapId, map: adventure.maps[mapId] });
+    } else {
+        console.error('Failed to save adventure after layer reorder');
+        res.status(500).json({ error: 'Failed to reorder layers' });
     }
 });
 
@@ -327,42 +517,6 @@ app.delete('/api/adventures/:adventureId/maps/:mapId/layers/:layerId', (req, res
     }
 });
 
-app.put('/api/adventures/:adventureId/maps/:mapId/layers/reorder', (req, res) => {
-    const { adventureId, mapId } = req.params;
-    const { layerIds } = req.body;
-    
-    const adventure = loadAdventure(adventureId);
-    if (!adventure || !adventure.maps[mapId]) {
-        return res.status(404).json({ error: 'Map not found' });
-    }
-    
-    // Validate that all layer IDs exist in the map
-    const existingLayerIds = adventure.maps[mapId].layers.map(l => l.id);
-    const validLayerIds = layerIds.filter(id => existingLayerIds.includes(id));
-    
-    if (validLayerIds.length !== existingLayerIds.length) {
-        return res.status(400).json({ error: 'Invalid layer IDs provided' });
-    }
-    
-    // Reorder layers based on the provided order
-    const reorderedLayers = [];
-    for (const layerId of layerIds) {
-        const layer = adventure.maps[mapId].layers.find(l => l.id === layerId);
-        if (layer) {
-            reorderedLayers.push(layer);
-        }
-    }
-    
-    adventure.maps[mapId].layers = reorderedLayers;
-    
-    if (saveAdventure(adventure)) {
-        res.json({ success: true, map: adventure.maps[mapId] });
-        io.emit('map-updated', { adventureId, mapId, map: adventure.maps[mapId] });
-    } else {
-        res.status(500).json({ error: 'Failed to reorder layers' });
-    }
-});
-
 // Fog of war endpoints (adventure-scoped)
 app.put('/api/adventures/:adventureId/maps/:mapId/fog', (req, res) => {
     const { adventureId, mapId } = req.params;
@@ -395,6 +549,123 @@ app.post('/upload', upload.single('image'), (req, res) => {
         imageUrl: imageUrl,
         filename: req.file.filename 
     });
+});
+
+// Token Vault API endpoints
+app.get('/api/tokens', (req, res) => {
+    const tokens = getAllTokens();
+    res.json(tokens);
+});
+
+app.get('/api/tokens/search', (req, res) => {
+    const { q } = req.query;
+    if (!q || q.trim() === '') {
+        return res.json([]);
+    }
+    
+    const results = searchTokens(q.trim());
+    res.json(results);
+});
+
+app.post('/api/tokens', upload.single('image'), (req, res) => {
+    const { name, savePermanent } = req.body;
+    
+    if (!req.file || !name || name.trim() === '') {
+        return res.status(400).json({ error: 'Image and name are required' });
+    }
+    
+    const imageUrl = `/uploads/${req.file.filename}`;
+    
+    if (savePermanent === 'true') {
+        // Save to token vault
+        const tokenId = `token-${Date.now()}`;
+        const token = {
+            id: tokenId,
+            name: name.trim(),
+            imageUrl: imageUrl,
+            filename: req.file.filename,
+            created: new Date().toISOString()
+        };
+        
+        if (saveToken(token)) {
+            res.json({ 
+                success: true, 
+                imageUrl: imageUrl,
+                filename: req.file.filename,
+                tokenId: tokenId,
+                savedToVault: true
+            });
+        } else {
+            res.status(500).json({ error: 'Failed to save token to vault' });
+        }
+    } else {
+        // Just return the uploaded image info
+        res.json({ 
+            success: true, 
+            imageUrl: imageUrl,
+            filename: req.file.filename,
+            savedToVault: false
+        });
+    }
+});
+
+// Map Vault API endpoints
+app.get('/api/maps', (req, res) => {
+    const maps = getAllMaps();
+    res.json(maps);
+});
+
+app.get('/api/maps/search', (req, res) => {
+    const { q } = req.query;
+    if (!q || q.trim() === '') {
+        return res.json([]);
+    }
+    
+    const results = searchMaps(q.trim());
+    res.json(results);
+});
+
+app.post('/api/maps', upload.single('image'), (req, res) => {
+    const { name, description, savePermanent } = req.body;
+    
+    if (!req.file || !name || name.trim() === '') {
+        return res.status(400).json({ error: 'Image and name are required' });
+    }
+    
+    const imageUrl = `/uploads/${req.file.filename}`;
+    
+    if (savePermanent === 'true') {
+        // Save to map vault
+        const mapId = `map-vault-${Date.now()}`;
+        const map = {
+            id: mapId,
+            name: name.trim(),
+            description: description ? description.trim() : '',
+            imageUrl: imageUrl,
+            filename: req.file.filename,
+            created: new Date().toISOString()
+        };
+        
+        if (saveMap(map)) {
+            res.json({ 
+                success: true, 
+                imageUrl: imageUrl,
+                filename: req.file.filename,
+                mapId: mapId,
+                savedToVault: true
+            });
+        } else {
+            res.status(500).json({ error: 'Failed to save map to vault' });
+        }
+    } else {
+        // Just return the uploaded image info
+        res.json({ 
+            success: true, 
+            imageUrl: imageUrl,
+            filename: req.file.filename,
+            savedToVault: false
+        });
+    }
 });
 
 // Serve uploaded files

@@ -66,6 +66,7 @@ class BattlemapDM {
         this.currentPlayerZoom = 1;
         this.currentPlayerPanX = 0;
         this.currentPlayerPanY = 0;
+        this.currentPlayerNameFontSize = 14;
         
         // Image placement state
         this.pendingImageUrl = null;
@@ -225,6 +226,22 @@ class BattlemapDM {
             });
         }
         
+        // Token search functionality
+        const tokenSearch = document.getElementById('tokenSearch');
+        if (tokenSearch) {
+            tokenSearch.addEventListener('input', (e) => {
+                this.searchTokens(e.target.value);
+            });
+        }
+        
+        // Map search functionality
+        const mapSearch = document.getElementById('mapSearch');
+        if (mapSearch) {
+            mapSearch.addEventListener('input', (e) => {
+                this.searchMaps(e.target.value);
+            });
+        }
+        
         // New fog of war controls
         const showEverythingBtn = document.getElementById('showEverythingBtn');
         if (showEverythingBtn) {
@@ -346,6 +363,18 @@ class BattlemapDM {
                 } else {
                     this.updatePlayerView({ pan: { x: this.currentPlayerPanX, y: panY } });
                 }
+            });
+        }
+        
+        const playerNameFontSizeSlider = document.getElementById('playerNameFontSizeSlider');
+        if (playerNameFontSizeSlider) {
+            playerNameFontSizeSlider.addEventListener('input', (e) => {
+                const fontSize = parseInt(e.target.value);
+                const playerNameFontSizeValue = document.getElementById('playerNameFontSizeValue');
+                if (playerNameFontSizeValue) {
+                    playerNameFontSizeValue.textContent = `${fontSize}px`;
+                }
+                this.updatePlayerNameFontSize(fontSize);
             });
         }
         
@@ -712,6 +741,12 @@ class BattlemapDM {
     }
     
     createShape(type, x, y) {
+        const shapeNames = {
+            'rectangle': 'Rectangle',
+            'circle': 'Circle',
+            'line': 'Line'
+        };
+        
         return {
             type,
             x,
@@ -720,7 +755,8 @@ class BattlemapDM {
             height: 0,
             color: this.drawingColor,
             opacity: this.drawingOpacity,
-            size: this.drawingSize
+            size: this.drawingSize,
+            name: shapeNames[type] || type.charAt(0).toUpperCase() + type.slice(1)
         };
     }
     
@@ -1207,16 +1243,35 @@ class BattlemapDM {
     
     // Map Management
     showNewMapModal() {
-        document.getElementById('newMapModal').style.display = 'block';
+        const modal = document.getElementById('newMapModal');
+        modal.style.display = 'block';
+        
+        // Reset map vault specific fields
+        document.getElementById('mapSearch').value = '';
+        document.getElementById('mapName').value = '';
+        document.getElementById('mapDescription').value = '';
+        document.getElementById('mapBackground').value = '';
+        document.getElementById('saveMapPermanent').checked = false;
+        document.getElementById('mapSearchResults').innerHTML = '';
+        this.selectedMapFromSearch = null;
     }
     
     createNewMap() {
         const name = document.getElementById('mapName').value || 'New Battlemap';
+        const description = document.getElementById('mapDescription').value || '';
         const backgroundFile = document.getElementById('mapBackground').files[0];
+        const savePermanent = document.getElementById('saveMapPermanent').checked;
         
+        // If a map is selected from search, use it
+        if (this.selectedMapFromSearch) {
+            this.createMapWithBackground(this.selectedMapFromSearch.name, this.selectedMapFromSearch.imageUrl);
+            return;
+        }
+        
+        // Otherwise, handle file upload
         if (backgroundFile) {
-            this.uploadBackgroundImage(backgroundFile).then(imageUrl => {
-                this.createMapWithBackground(name, imageUrl);
+            this.uploadMapImage(backgroundFile, name, description, savePermanent).then(data => {
+                this.createMapWithBackground(name, data.imageUrl);
             });
         } else {
             this.createMapWithBackground(name, '');
@@ -1282,6 +1337,129 @@ class BattlemapDM {
                 console.error('Upload error:', error);
                 reject(error);
             });
+        });
+    }
+    
+    uploadMapImage(file, mapName, description, savePermanent) {
+        return new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            if (mapName && savePermanent) {
+                formData.append('name', mapName);
+                formData.append('description', description);
+                formData.append('savePermanent', 'true');
+                
+                // Use the map vault endpoint
+                fetch('/api/maps', {
+                    method: 'POST',
+                    body: formData
+                }).then(response => {
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+                        });
+                    }
+                    return response.json();
+                }).then(data => {
+                    if (data.success) {
+                        resolve(data);
+                    } else {
+                        reject(new Error(data.error));
+                    }
+                }).catch(error => {
+                    reject(error);
+                });
+            } else {
+                // Use the regular upload endpoint
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                }).then(response => {
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+                        });
+                    }
+                    return response.json();
+                }).then(data => {
+                    if (data.success) {
+                        resolve(data);
+                    } else {
+                        reject(new Error(data.error));
+                    }
+                }).catch(error => {
+                    reject(error);
+                });
+            }
+        });
+    }
+    
+    selectMapFromSearch(map) {
+        this.selectedMapFromSearch = map;
+        
+        // Update UI to show selection
+        const results = document.querySelectorAll('.map-result-item');
+        results.forEach(item => item.classList.remove('selected'));
+        
+        // Find and select the clicked item
+        const selectedItem = Array.from(results).find(item => 
+            item.dataset.mapId === map.id
+        );
+        if (selectedItem) {
+            selectedItem.classList.add('selected');
+        }
+        
+        // Update form fields
+        document.getElementById('mapName').value = map.name;
+        document.getElementById('mapDescription').value = map.description || '';
+    }
+    
+    searchMaps(query) {
+        if (!query || query.trim() === '') {
+            document.getElementById('mapSearchResults').innerHTML = '';
+            return;
+        }
+        
+        fetch(`/api/maps/search?q=${encodeURIComponent(query.trim())}`)
+            .then(response => response.json())
+            .then(maps => {
+                this.displayMapSearchResults(maps);
+            })
+            .catch(error => {
+                console.error('Error searching maps:', error);
+            });
+    }
+    
+    displayMapSearchResults(maps) {
+        const resultsContainer = document.getElementById('mapSearchResults');
+        resultsContainer.innerHTML = '';
+        
+        if (maps.length === 0) {
+            resultsContainer.innerHTML = '<div class="no-results">No maps found</div>';
+            return;
+        }
+        
+        maps.forEach(map => {
+            const resultItem = document.createElement('div');
+            resultItem.className = 'map-result-item';
+            resultItem.dataset.mapId = map.id;
+            
+            resultItem.innerHTML = `
+                <img src="${map.imageUrl}" alt="${map.name}" class="map-result-preview">
+                <div class="map-result-info">
+                    <div class="map-result-name">${map.name}</div>
+                    <div class="map-result-meta">
+                        ${map.description ? map.description : 'No description'}
+                    </div>
+                </div>
+            `;
+            
+            resultItem.addEventListener('click', () => {
+                this.selectMapFromSearch(map);
+            });
+            
+            resultsContainer.appendChild(resultItem);
         });
     }
     
@@ -1436,21 +1614,9 @@ class BattlemapDM {
             };
             fogImg.src = map.fogDataUrl;
         } else {
-            // Start with full fog for new maps
-            console.log('New map detected, applying full fog');
-            this.fogCtx.fillStyle = 'black';
-            this.fogCtx.fillRect(0, 0, mapWidth, mapHeight);
-            
-            // Update local map data
-            map.fogDataUrl = this.fogCanvas.toDataURL('image/png', 0.8);
-            console.log('Applied full fog to new map');
-            
-            // Update fog cache
-            this.fogImageMapId = map.id;
-            this.fogImageDataUrl = map.fogDataUrl;
-            
-            // Save to server
-            this.saveFogState();
+            // Start with no fog for new maps
+            console.log('New map detected, starting with no fog');
+            // Don't apply any fog - let the DM decide when to add fog
         }
     }
     
@@ -1486,12 +1652,22 @@ class BattlemapDM {
     
     updateLayerList() {
         const container = document.getElementById('layerList');
+        if (!container) {
+            console.error('layerList container not found');
+            return;
+        }
         container.innerHTML = '';
         
         const map = this.maps.get(this.viewingMapId);
-        if (!map) return;
+        if (!map) {
+            return;
+        }
         
         map.layers.forEach((layer, index) => {
+            if (!layer || !layer.id) {
+                console.error('Invalid layer at index', index, ':', layer);
+                return; // Skip this layer
+            }
             const item = document.createElement('div');
             item.className = `layer-item ${layer === this.selectedLayer ? 'selected' : ''}`;
             item.draggable = true;
@@ -1506,7 +1682,7 @@ class BattlemapDM {
                     <button class="layer-visibility" onclick="battlemapDM.toggleLayerVisibility('${layer.id}')">
                         <i class="fas fa-${layer.visible !== false ? 'eye' : 'eye-slash'}"></i>
                     </button>
-                    <span>${layer.type} - ${layer.id.slice(0, 8)}</span>
+                    <span>${layer.name || layer.type} - ${layer.id.slice(0, 8)}</span>
                 </div>
                 <div class="layer-actions">
                     <button onclick="battlemapDM.selectLayer('${layer.id}')" title="Select">
@@ -1626,7 +1802,13 @@ class BattlemapDM {
     
     saveLayerOrder() {
         const map = this.maps.get(this.viewingMapId);
-        if (!map) return;
+        if (!map) {
+            console.error('No map found for viewingMapId:', this.viewingMapId);
+            return;
+        }
+        
+        console.log('Saving layer order for adventure:', this.adventureId, 'map:', this.viewingMapId);
+        console.log('Layer IDs to save:', map.layers.map(l => l.id));
         
         // Send the new layer order to the server
         fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}/layers/reorder`, {
@@ -1637,7 +1819,10 @@ class BattlemapDM {
             if (response.ok) {
                 console.log('Layer order saved successfully');
             } else {
-                console.error('Failed to save layer order');
+                console.error('Failed to save layer order, status:', response.status);
+                return response.text().then(text => {
+                    console.error('Response text:', text);
+                });
             }
         }).catch(error => {
             console.error('Error saving layer order:', error);
@@ -1741,6 +1926,16 @@ class BattlemapDM {
         // Sort players by initiative (descending)
         const sortedPlayers = Array.from(this.players.values()).sort((a, b) => b.initiative - a.initiative);
         
+        // Find the next player (the one after the current active player)
+        let nextPlayerId = null;
+        if (this.currentActivePlayerId && sortedPlayers.length > 1) {
+            const currentIndex = sortedPlayers.findIndex(p => p.id === this.currentActivePlayerId);
+            if (currentIndex !== -1) {
+                const nextIndex = (currentIndex + 1) % sortedPlayers.length;
+                nextPlayerId = sortedPlayers[nextIndex].id;
+            }
+        }
+        
         sortedPlayers.forEach(player => {
             const item = document.createElement('div');
             item.className = 'player-item';
@@ -1748,6 +1943,10 @@ class BattlemapDM {
             // Add active class if this is the current active player
             if (player.id === this.currentActivePlayerId) {
                 item.classList.add('active');
+            }
+            // Add next class if this is the next player
+            else if (player.id === nextPlayerId) {
+                item.classList.add('next');
             }
             
             item.innerHTML = `
@@ -1901,22 +2100,27 @@ class BattlemapDM {
         // Reset the form
         document.getElementById('tokenImage').value = '';
         document.getElementById('tokenName').value = '';
+        document.getElementById('savePermanent').checked = false;
+        document.getElementById('tokenSearch').value = '';
+        document.getElementById('tokenSearchResults').innerHTML = '';
+        this.selectedTokenFromSearch = null;
     }
     
     uploadTokenImage() {
         const imageFile = document.getElementById('tokenImage').files[0];
         const tokenName = document.getElementById('tokenName').value || 'Token';
+        const savePermanent = document.getElementById('savePermanent').checked;
         
         if (!imageFile) {
             alert('Please select an image file');
             return;
         }
         
-        this.uploadImageFile(imageFile).then(imageUrl => {
+        this.uploadImageFile(imageFile, tokenName, savePermanent).then(data => {
             this.closeModals();
             // Set the image tool as active and store the image URL for placement
             this.setTool('image');
-            this.pendingImageUrl = imageUrl;
+            this.pendingImageUrl = data.imageUrl;
             this.pendingImageName = tokenName;
             // Change cursor to indicate image placement mode
             this.canvas.style.cursor = 'crosshair';
@@ -1928,30 +2132,110 @@ class BattlemapDM {
         });
     }
     
-    uploadImageFile(file) {
+    selectTokenFromSearch(token) {
+        this.selectedTokenFromSearch = token;
+        this.closeModals();
+        // Set the image tool as active and store the image URL for placement
+        this.setTool('image');
+        this.pendingImageUrl = token.imageUrl;
+        this.pendingImageName = token.name;
+        // Change cursor to indicate image placement mode
+        this.canvas.style.cursor = 'crosshair';
+        // Update status
+        document.getElementById('statusText').textContent = `Click to place ${token.name} (Press Esc to cancel)`;
+    }
+    
+    searchTokens(query) {
+        if (!query || query.trim() === '') {
+            document.getElementById('tokenSearchResults').innerHTML = '';
+            return;
+        }
+        
+        fetch(`/api/tokens/search?q=${encodeURIComponent(query.trim())}`)
+            .then(response => response.json())
+            .then(tokens => {
+                this.displayTokenSearchResults(tokens);
+            })
+            .catch(error => {
+                console.error('Token search error:', error);
+            });
+    }
+    
+    displayTokenSearchResults(tokens) {
+        const resultsContainer = document.getElementById('tokenSearchResults');
+        resultsContainer.innerHTML = '';
+        
+        if (tokens.length === 0) {
+            resultsContainer.innerHTML = '<div class="token-result-item">No tokens found</div>';
+            return;
+        }
+        
+        tokens.forEach(token => {
+            const resultItem = document.createElement('div');
+            resultItem.className = 'token-result-item';
+            resultItem.innerHTML = `
+                <img src="${token.imageUrl}" alt="${token.name}" class="token-result-preview">
+                <div class="token-result-info">
+                    <div class="token-result-name">${token.name}</div>
+                    <div class="token-result-meta">Added: ${new Date(token.created).toLocaleDateString()}</div>
+                </div>
+            `;
+            resultItem.addEventListener('click', () => this.selectTokenFromSearch(token));
+            resultsContainer.appendChild(resultItem);
+        });
+    }
+    
+    uploadImageFile(file, tokenName = null, savePermanent = false) {
         return new Promise((resolve, reject) => {
             const formData = new FormData();
             formData.append('image', file);
             
-            fetch('/upload', {
-                method: 'POST',
-                body: formData
-            }).then(response => {
-                if (!response.ok) {
-                    return response.text().then(text => {
-                        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-                    });
-                }
-                return response.json();
-            }).then(data => {
-                if (data.success) {
-                    resolve(data.imageUrl);
-                } else {
-                    reject(new Error(data.error));
-                }
-            }).catch(error => {
-                reject(error);
-            });
+            if (tokenName && savePermanent) {
+                formData.append('name', tokenName);
+                formData.append('savePermanent', 'true');
+                
+                // Use the token vault endpoint
+                fetch('/api/tokens', {
+                    method: 'POST',
+                    body: formData
+                }).then(response => {
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+                        });
+                    }
+                    return response.json();
+                }).then(data => {
+                    if (data.success) {
+                        resolve(data);
+                    } else {
+                        reject(new Error(data.error));
+                    }
+                }).catch(error => {
+                    reject(error);
+                });
+            } else {
+                // Use the regular upload endpoint
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                }).then(response => {
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+                        });
+                    }
+                    return response.json();
+                }).then(data => {
+                    if (data.success) {
+                        resolve(data);
+                    } else {
+                        reject(new Error(data.error));
+                    }
+                }).catch(error => {
+                    reject(error);
+                });
+            }
         });
     }
     
@@ -1988,6 +2272,9 @@ class BattlemapDM {
             // Add the layer to the map
             this.addLayer(imageLayer);
             
+            // Force a re-render to show the new token immediately
+            setTimeout(() => this.render(), 100);
+            
             // Update status
             document.getElementById('statusText').textContent = `Placed ${this.pendingImageName || 'Token'} (${width}x${height})`;
             
@@ -2015,6 +2302,10 @@ class BattlemapDM {
             };
             
             this.addLayer(imageLayer);
+            
+            // Force a re-render to show the new token immediately
+            setTimeout(() => this.render(), 100);
+            
             document.getElementById('statusText').textContent = `Placed ${this.pendingImageName || 'Token'} (fallback size)`;
             
             this.pendingImageUrl = null;
@@ -2361,13 +2652,29 @@ class BattlemapDM {
             adventureId: this.adventureId,
             mapId: this.viewingMapId,
             zoom: this.currentPlayerZoom,
-            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
+            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY },
+            fontSize: this.currentPlayerNameFontSize
         });
         
         console.log('Player view updated:', {
             zoom: this.currentPlayerZoom,
             pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
         });
+    }
+    
+    updatePlayerNameFontSize(fontSize) {
+        this.currentPlayerNameFontSize = fontSize;
+        
+        // Emit font size update to all connected clients
+        this.socket.emit('player-view-updated', {
+            adventureId: this.adventureId,
+            mapId: this.viewingMapId,
+            zoom: this.currentPlayerZoom,
+            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY },
+            fontSize: this.currentPlayerNameFontSize
+        });
+        
+        console.log('Player name font size updated:', fontSize);
     }
     
     resetPlayerView() {
@@ -2434,7 +2741,8 @@ class BattlemapDM {
             adventureId: this.adventureId,
             mapId: this.viewingMapId,
             zoom: this.currentPlayerZoom,
-            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
+            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY },
+            fontSize: this.currentPlayerNameFontSize
         });
         
         console.log('Player view reset:', {
@@ -2630,12 +2938,12 @@ class BattlemapDM {
             });
         });
         
-        // Initialize all sections as expanded by default
+        // Initialize all sections as collapsed by default
         document.querySelectorAll('.section-content').forEach(content => {
-            content.classList.remove('collapsed');
+            content.classList.add('collapsed');
         });
         document.querySelectorAll('.section-header').forEach(header => {
-            header.classList.remove('collapsed');
+            header.classList.add('collapsed');
         });
     }
 }
