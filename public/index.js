@@ -8,6 +8,7 @@ class AdventureManager {
     async init() {
         await this.loadAdventures();
         this.setupEventListeners();
+        this.checkJsonFiles();
     }
 
     async loadAdventures() {
@@ -232,6 +233,15 @@ class AdventureManager {
             }
         });
 
+        // Download buttons
+        document.getElementById('downloadSpellsBtn').addEventListener('click', () => {
+            this.downloadJsonData('spells');
+        });
+
+        document.getElementById('downloadMonstersBtn').addEventListener('click', () => {
+            this.downloadJsonData('monsters');
+        });
+
         // Modal close buttons
         document.querySelectorAll('.close').forEach(closeBtn => {
             closeBtn.addEventListener('click', (e) => {
@@ -271,6 +281,101 @@ class AdventureManager {
     showSuccess(message) {
         // Simple success display - you could enhance this with a proper notification system
         alert(`Success: ${message}`);
+    }
+
+    async downloadJsonData(type) {
+        const urlInput = document.getElementById(`${type}Url`);
+        const statusDiv = document.getElementById(`${type}Status`);
+        const downloadBtn = document.getElementById(`download${type.charAt(0).toUpperCase() + type.slice(1)}Btn`);
+        
+        const url = urlInput.value.trim();
+        if (!url) {
+            this.updateDownloadStatus(statusDiv, 'Please enter a valid URL', 'error');
+            return;
+        }
+
+        // Update UI to show loading
+        this.updateDownloadStatus(statusDiv, 'Downloading...', 'loading');
+        downloadBtn.disabled = true;
+
+        try {
+            // For GitHub Gists, we need to get the raw content
+            let downloadUrl = url;
+            if (url.includes('gist.github.com')) {
+                // Convert gist URL to raw URL
+                const gistId = url.split('/').pop();
+                downloadUrl = `https://gist.githubusercontent.com/dmcb/${gistId}/raw/srd-5.2-spells.json`;
+                if (type === 'monsters') {
+                    downloadUrl = `https://gist.githubusercontent.com/tkfu/${gistId}/raw/srd_5e_monsters.json`;
+                }
+            }
+
+            const response = await fetch(downloadUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.text();
+            
+            // Validate that it's JSON
+            try {
+                JSON.parse(data);
+            } catch (e) {
+                throw new Error('Invalid JSON data received');
+            }
+
+            // Save to localStorage
+            localStorage.setItem(`${type}Data`, data);
+            localStorage.setItem(`${type}DownloadDate`, new Date().toISOString());
+
+            this.updateDownloadStatus(statusDiv, `${type.charAt(0).toUpperCase() + type.slice(1)} data downloaded successfully!`, 'success');
+            
+            // Check if both files are downloaded and hide the section
+            this.checkJsonFiles();
+
+        } catch (error) {
+            console.error(`Error downloading ${type} data:`, error);
+            this.updateDownloadStatus(statusDiv, `Failed to download: ${error.message}`, 'error');
+        } finally {
+            downloadBtn.disabled = false;
+        }
+    }
+
+    updateDownloadStatus(statusDiv, message, type) {
+        statusDiv.textContent = message;
+        statusDiv.className = `download-status ${type}`;
+    }
+
+    checkJsonFiles() {
+        const spellsData = localStorage.getItem('spellsData');
+        const monstersData = localStorage.getItem('monstersData');
+        const downloadSection = document.getElementById('jsonDownloadSection');
+
+        // Update status displays
+        if (spellsData) {
+            const downloadDate = localStorage.getItem('spellsDownloadDate');
+            const date = new Date(downloadDate).toLocaleDateString();
+            this.updateDownloadStatus(
+                document.getElementById('spellsStatus'),
+                `Downloaded on ${date}`,
+                'success'
+            );
+        }
+
+        if (monstersData) {
+            const downloadDate = localStorage.getItem('monstersDownloadDate');
+            const date = new Date(downloadDate).toLocaleDateString();
+            this.updateDownloadStatus(
+                document.getElementById('monstersStatus'),
+                `Downloaded on ${date}`,
+                'success'
+            );
+        }
+
+        // Hide the entire download section if both files are downloaded
+        if (spellsData && monstersData) {
+            downloadSection.style.display = 'none';
+        }
     }
 }
 

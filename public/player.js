@@ -36,6 +36,9 @@ class BattlemapPlayer {
         this.currentActivePlayerId = null;
         this.playerNameFontSize = 14; // Default font size for player names
         
+        // Spell overlay state
+        this.spellOverlayRotation = 0; // Current rotation in degrees
+        
         // Initialize
         this.initializeCanvas();
         this.bindEvents();
@@ -234,6 +237,30 @@ class BattlemapPlayer {
                 });
                 this.currentActivePlayerId = data.currentActivePlayerId || null;
                 this.updatePlayerNamesOverlay();
+            }
+        });
+        
+        // Handle spell display from DM
+        this.socket.on('show-spell-to-player', (data) => {
+            if (data.adventureId === this.adventureId) {
+                console.log('Player received spell:', data.spell.name);
+                this.showSpellOverlay(data.spell);
+            }
+        });
+        
+        // Handle spell hide from DM
+        this.socket.on('hide-spell-from-player', (data) => {
+            if (data.adventureId === this.adventureId) {
+                console.log('Hiding spell overlay');
+                this.hideSpellOverlay();
+            }
+        });
+        
+        // Handle spell overlay rotation from DM
+        this.socket.on('rotate-spell-overlay', (data) => {
+            if (data.adventureId === this.adventureId) {
+                console.log('Rotating spell overlay');
+                this.rotateSpellOverlay();
             }
         });
     }
@@ -607,6 +634,69 @@ class BattlemapPlayer {
                 playerId === this.currentActivePlayerId ? '(ACTIVE)' : 
                 playerId === nextPlayerId ? '(NEXT)' : '');
         });
+    }
+    
+    showSpellOverlay(spell) {
+        const overlay = document.getElementById('spellOverlay');
+        const title = document.getElementById('spellOverlayTitle');
+        const meta = document.getElementById('spellOverlayMeta');
+        const body = document.getElementById('spellOverlayBody');
+        
+        // Set title
+        title.innerHTML = `<i class="fas fa-magic"></i> ${spell.name}`;
+        
+        // Set meta information
+        const metaInfo = [];
+        if (spell.level) metaInfo.push(`<span>Level ${spell.level}</span>`);
+        if (spell.school) metaInfo.push(`<span>${spell.school}</span>`);
+        if (spell.casting_time) metaInfo.push(`<span>${spell.casting_time}</span>`);
+        if (spell.range) metaInfo.push(`<span>Range: ${spell.range}</span>`);
+        if (spell.duration) metaInfo.push(`<span>Duration: ${spell.duration}</span>`);
+        if (spell.components) metaInfo.push(`<span>Components: ${spell.components}</span>`);
+        
+        meta.innerHTML = metaInfo.join('');
+        
+        // Set body content
+        let bodyContent = '';
+        
+        if (spell.description) {
+            bodyContent += `<p>${spell.description}</p>`;
+        }
+        
+        if (spell.higher_level) {
+            bodyContent += `<h4>At Higher Levels</h4><p>${spell.higher_level}</p>`;
+        }
+        
+        if (spell.classes && spell.classes.length > 0) {
+            bodyContent += `<h4>Classes</h4><p>${spell.classes.join(', ')}</p>`;
+        }
+        
+        if (spell.subclasses && spell.subclasses.length > 0) {
+            bodyContent += `<h4>Subclasses</h4><p>${spell.subclasses.join(', ')}</p>`;
+        }
+        
+        body.innerHTML = bodyContent;
+        
+        // Apply current rotation and show the overlay
+        overlay.style.transform = `rotate(${this.spellOverlayRotation}deg)`;
+        overlay.style.display = 'flex';
+    }
+    
+    hideSpellOverlay() {
+        const overlay = document.getElementById('spellOverlay');
+        overlay.style.display = 'none';
+        // Reset rotation when hiding
+        this.spellOverlayRotation = 0;
+    }
+    
+    rotateSpellOverlay() {
+        // Rotate by 90 degrees
+        this.spellOverlayRotation = (this.spellOverlayRotation + 90) % 360;
+        
+        const overlay = document.getElementById('spellOverlay');
+        if (overlay && overlay.style.display !== 'none') {
+            overlay.style.transform = `rotate(${this.spellOverlayRotation}deg)`;
+        }
     }
     
 }

@@ -11,8 +11,15 @@
 </head>
 <body>
     <div class="app-container">
+        <!-- Sidebar Toggle Button -->
+        <div class="sidebar-toggle">
+            <button id="sidebarToggleBtn" class="hamburger-btn">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+        
         <!-- Sidebar -->
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h2><i class="fas fa-dragon"></i> DM Control</h2>
                 <div class="build-info">
@@ -28,9 +35,14 @@
                 </h3>
                 <div class="section-content" id="battlemaps-content">
                     <div class="map-controls">
-                        <button id="newMapBtn" class="btn btn-primary">
-                            <i class="fas fa-plus"></i> New Map
-                        </button>
+                        <div class="map-buttons">
+                            <button id="newMapBtn" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> New Map
+                            </button>
+                            <button id="importMapBtn" class="btn btn-secondary">
+                                <i class="fas fa-download"></i> Import Map
+                            </button>
+                        </div>
                         <div id="mapTabs" class="map-tabs"></div>
                     </div>
                 </div>
@@ -175,6 +187,11 @@
                        </button>
                    </div>
                    <div id="playersList" class="players-list"></div>
+                   <div class="combat-controls">
+                       <button id="endCombatBtn" class="btn btn-danger">
+                           <i class="fas fa-stop-circle"></i> End Combat
+                       </button>
+                   </div>
                    <div class="add-player-form">
                        <div class="form-group">
                            <label for="playerName">Player Name:</label>
@@ -193,8 +210,26 @@
                            <i class="fas fa-plus"></i> Add Player
                        </button>
                    </div>
-               </div>
-           </div>
+                </div>
+            </div>
+            </div>
+            
+            <!-- SRD 5e -->
+            <div class="sidebar-section">
+                <h3 class="section-header" data-section="srd-5e">
+                    <i class="fas fa-book"></i> SRD 5e
+                    <i class="fas fa-chevron-down section-toggle"></i>
+                </h3>
+                <div class="section-content" id="srd-5e-content">
+                    <div class="srd-controls">
+                        <button id="searchSpellBtn" class="btn btn-primary">
+                            <i class="fas fa-magic"></i> Search for Spell
+                        </button>
+                        <button id="searchMonsterBtn" class="btn btn-primary">
+                            <i class="fas fa-dragon"></i> Search for Monster
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -208,6 +243,24 @@
                         <button id="zoomOut" class="zoom-btn"><i class="fas fa-search-minus"></i></button>
                         <button id="resetZoom" class="zoom-btn"><i class="fas fa-expand-arrows-alt"></i></button>
                     </div>
+                    
+                    <div class="fog-controls-overlay">
+                        <button id="arrowToolBtnOverlay" class="fog-btn active" title="Arrow Tool (Select)">
+                            <i class="fas fa-mouse-pointer"></i>
+                        </button>
+                        <button id="fogBrushBtnOverlay" class="fog-btn" title="Fog Brush">
+                            <i class="fas fa-paint-brush"></i>
+                        </button>
+                        <button id="revealBrushBtnOverlay" class="fog-btn" title="Reveal Brush">
+                            <i class="fas fa-eraser"></i>
+                        </button>
+                        <button id="showEverythingBtnOverlay" class="fog-btn" title="Show Everything">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button id="fogEverythingBtnOverlay" class="fog-btn" title="Fog Everything">
+                            <i class="fas fa-eye-slash"></i>
+                        </button>
+                    </div>
                     <div class="status-bar">
                         <span id="statusText">Ready</span>
                         <span id="coordinates">0, 0</span>
@@ -215,6 +268,9 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Sticky Windows Container -->
+            <div id="stickyWindowsContainer" class="sticky-windows-container"></div>
         </div>
     </div>
     
@@ -318,6 +374,71 @@
              </div>
          </div>
      </div>
+    
+    <!-- Spell Search Modal -->
+    <div id="spellSearchModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-magic"></i> Spell Search</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="spell-search-section">
+                    <h4><i class="fas fa-search"></i> Search Spells</h4>
+                    <div class="form-group">
+                        <label for="spellSearch">Search by name:</label>
+                        <input type="text" id="spellSearch" placeholder="Enter spell name to search...">
+                    </div>
+                    <div id="spellSearchResults" class="spell-search-results"></div>
+                </div>
+                
+                <div id="spellDetailsSection" class="spell-details-section" style="display: none;">
+                    <h4><i class="fas fa-info-circle"></i> Spell Details</h4>
+                    <div id="spellDetailsTable" class="spell-details-table"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="showSpellToPlayerBtn" class="btn btn-primary" style="display: none;">
+                    <i class="fas fa-eye"></i> Show to Player
+                </button>
+                <button id="stickySpellBtn" class="btn btn-warning" style="display: none;">
+                    <i class="fas fa-thumbtack"></i> Sticky
+                </button>
+                <button class="btn btn-secondary close-modal">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Monster Search Modal -->
+    <div id="monsterSearchModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-dragon"></i> Monster Search</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="monster-search-section">
+                    <h4><i class="fas fa-search"></i> Search Monsters</h4>
+                    <div class="form-group">
+                        <label for="monsterSearch">Search by name:</label>
+                        <input type="text" id="monsterSearch" placeholder="Enter monster name to search...">
+                    </div>
+                    <div id="monsterSearchResults" class="monster-search-results"></div>
+                </div>
+                
+                <div id="monsterDetailsSection" class="monster-details-section" style="display: none;">
+                    <h4><i class="fas fa-info-circle"></i> Monster Details</h4>
+                    <div id="monsterDetailsTable" class="monster-details-table"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="stickyMonsterBtn" class="btn btn-warning" style="display: none;">
+                    <i class="fas fa-thumbtack"></i> Sticky
+                </button>
+                <button class="btn btn-secondary close-modal">Close</button>
+            </div>
+        </div>
+    </div>
     
     <script src="/socket.io/socket.io.js"></script>
     <script src="/dm.js"></script>

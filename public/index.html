@@ -27,6 +27,38 @@
                 </div>
             </div>
 
+            <!-- Download JSON Data -->
+            <div id="jsonDownloadSection" class="adventure-section">
+                <h2><i class="fas fa-download"></i> Download Game Data</h2>
+                <div class="json-download-form">
+                    <p class="download-description">Download D&D 5e spells and monsters data for enhanced gameplay. These files will be stored locally for your use.</p>
+                    
+                    <div class="download-item">
+                        <h3><i class="fas fa-magic"></i> Spells Data</h3>
+                        <div class="form-group">
+                            <label for="spellsUrl">Spells JSON URL:</label>
+                            <input type="url" id="spellsUrl" placeholder="Enter URL for spells JSON file" value="https://raw.githubusercontent.com/vorpalhex/srd_spells/refs/heads/master/spells.json">
+                        </div>
+                        <button id="downloadSpellsBtn" class="btn btn-primary">
+                            <i class="fas fa-download"></i> Download Spells
+                        </button>
+                        <div id="spellsStatus" class="download-status"></div>
+                    </div>
+                    
+                    <div class="download-item">
+                        <h3><i class="fas fa-dragon"></i> Monsters Data</h3>
+                        <div class="form-group">
+                            <label for="monstersUrl">Monsters JSON URL:</label>
+                            <input type="url" id="monstersUrl" placeholder="Enter URL for monsters JSON file" value="https://gist.githubusercontent.com/tkfu/9819e4ac6d529e225e9fc58b358c3479/raw/d4df8804c25a662efc42936db60cfbc0a5b19db8/srd_5e_monsters.json">
+                        </div>
+                        <button id="downloadMonstersBtn" class="btn btn-primary">
+                            <i class="fas fa-download"></i> Download Monsters
+                        </button>
+                        <div id="monstersStatus" class="download-status"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Create New Adventure -->
             <div class="adventure-section">
                 <h2><i class="fas fa-plus-circle"></i> Create New Adventure</h2>

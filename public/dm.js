@@ -42,6 +42,7 @@ class BattlemapDM {
         
         // Fog of War state
         this.fogTool = 'none'; // 'none', 'show-all', 'fog-all', 'fog-brush', 'reveal-brush'
+        this.currentFogTool = 'select'; // For overlay buttons: 'select', 'fog-brush', 'reveal-brush'
         this.fogOpacity = 0.8; // DM view opacity (0-1) - fixed value
         this.fogBrushSize = 50; // Brush size in pixels - fixed value
         this.isFogDrawing = false;
@@ -211,6 +212,13 @@ class BattlemapDM {
             });
         }
         
+        const importMapBtn = document.getElementById('importMapBtn');
+        if (importMapBtn) {
+            importMapBtn.addEventListener('click', () => {
+                this.importMap();
+            });
+        }
+        
         const createMapBtn = document.getElementById('createMapBtn');
         if (createMapBtn) {
             createMapBtn.addEventListener('click', () => {
@@ -242,6 +250,95 @@ class BattlemapDM {
             });
         }
         
+        // Spell search functionality
+        const spellSearch = document.getElementById('spellSearch');
+        if (spellSearch) {
+            spellSearch.addEventListener('input', (e) => {
+                this.searchSpells(e.target.value);
+            });
+        }
+        
+        // Monster search functionality
+        const monsterSearch = document.getElementById('monsterSearch');
+        if (monsterSearch) {
+            monsterSearch.addEventListener('input', (e) => {
+                this.searchMonsters(e.target.value);
+            });
+        }
+        
+        // Show spell to player button
+        const showSpellToPlayerBtn = document.getElementById('showSpellToPlayerBtn');
+        if (showSpellToPlayerBtn) {
+            showSpellToPlayerBtn.addEventListener('click', () => {
+                this.showSpellToPlayer();
+            });
+        }
+        
+        // Sticky spell button
+        const stickySpellBtn = document.getElementById('stickySpellBtn');
+        if (stickySpellBtn) {
+            stickySpellBtn.addEventListener('click', () => {
+                this.createStickySpellWindow();
+            });
+        }
+        
+        // Sticky monster button
+        const stickyMonsterBtn = document.getElementById('stickyMonsterBtn');
+        if (stickyMonsterBtn) {
+            stickyMonsterBtn.addEventListener('click', () => {
+                this.createStickyMonsterWindow();
+            });
+        }
+        
+        // Sidebar toggle button
+        const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+        if (sidebarToggleBtn) {
+            sidebarToggleBtn.addEventListener('click', () => {
+                this.toggleSidebar();
+            });
+        }
+        
+        // Fog controls overlay buttons
+        const arrowToolBtnOverlay = document.getElementById('arrowToolBtnOverlay');
+        const fogBrushBtnOverlay = document.getElementById('fogBrushBtnOverlay');
+        const revealBrushBtnOverlay = document.getElementById('revealBrushBtnOverlay');
+        const showEverythingBtnOverlay = document.getElementById('showEverythingBtnOverlay');
+        const fogEverythingBtnOverlay = document.getElementById('fogEverythingBtnOverlay');
+        
+        if (arrowToolBtnOverlay) {
+            arrowToolBtnOverlay.addEventListener('click', () => {
+                this.setTool('select');
+                this.currentFogTool = 'select';
+                this.updateFogButtonStates();
+            });
+        }
+        
+        if (fogBrushBtnOverlay) {
+            fogBrushBtnOverlay.addEventListener('click', () => {
+                this.currentFogTool = 'fog-brush';
+                this.updateFogButtonStates();
+            });
+        }
+        
+        if (revealBrushBtnOverlay) {
+            revealBrushBtnOverlay.addEventListener('click', () => {
+                this.currentFogTool = 'reveal-brush';
+                this.updateFogButtonStates();
+            });
+        }
+        
+        if (showEverythingBtnOverlay) {
+            showEverythingBtnOverlay.addEventListener('click', () => {
+                this.showEverything();
+            });
+        }
+        
+        if (fogEverythingBtnOverlay) {
+            fogEverythingBtnOverlay.addEventListener('click', () => {
+                this.fogEverything();
+            });
+        }
+        
         // New fog of war controls
         const showEverythingBtn = document.getElementById('showEverythingBtn');
         if (showEverythingBtn) {
@@ -260,14 +357,16 @@ class BattlemapDM {
         const fogBrushBtn = document.getElementById('fogBrushBtn');
         if (fogBrushBtn) {
             fogBrushBtn.addEventListener('click', () => {
-                this.setFogTool('fog-brush');
+                this.currentFogTool = 'fog-brush';
+                this.updateFogButtonStates();
             });
         }
         
         const revealBrushBtn = document.getElementById('revealBrushBtn');
         if (revealBrushBtn) {
             revealBrushBtn.addEventListener('click', () => {
-                this.setFogTool('reveal-brush');
+                this.currentFogTool = 'reveal-brush';
+                this.updateFogButtonStates();
             });
         }
         
@@ -419,6 +518,22 @@ class BattlemapDM {
             nextInitBtn.addEventListener('click', () => this.nextInitiative());
         }
         
+        const endCombatBtn = document.getElementById('endCombatBtn');
+        if (endCombatBtn) {
+            endCombatBtn.addEventListener('click', () => this.endCombat());
+        }
+        
+        // SRD 5e search buttons
+        const searchSpellBtn = document.getElementById('searchSpellBtn');
+        if (searchSpellBtn) {
+            searchSpellBtn.addEventListener('click', () => this.showSpellSearchModal());
+        }
+        
+        const searchMonsterBtn = document.getElementById('searchMonsterBtn');
+        if (searchMonsterBtn) {
+            searchMonsterBtn.addEventListener('click', () => this.showMonsterSearchModal());
+        }
+        
         // Modal events
         document.querySelectorAll('.close, .close-modal').forEach(btn => {
             btn.addEventListener('click', () => this.closeModals());
@@ -526,8 +641,13 @@ class BattlemapDM {
         // Deactivate fog tools when switching to shape tools
         if (tool !== 'fog-brush' && tool !== 'reveal-brush' && tool !== 'show-all' && tool !== 'fog-all') {
             this.fogTool = 'none';
+            this.currentFogTool = 'none'; // Also reset currentFogTool
             // Clear fog tool UI
             document.querySelectorAll('.fog-tool-group .tool-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            // Clear overlay fog buttons
+            document.querySelectorAll('.fog-controls-overlay .fog-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
         }
@@ -540,6 +660,12 @@ class BattlemapDM {
         
         // Update cursor
         this.canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+        
+        // Sync fog tool state when select tool is chosen
+        if (tool === 'select') {
+            this.currentFogTool = 'select';
+            this.updateFogButtonStates();
+        }
     }
     
     handleMouseDown(e) {
@@ -556,7 +682,7 @@ class BattlemapDM {
             this.panStart = { x: e.clientX - this.pan.x, y: e.clientY - this.pan.y };
             this.canvas.style.cursor = 'grabbing';
             e.preventDefault(); // Prevent context menu
-        } else if (this.fogTool === 'fog-brush' || this.fogTool === 'reveal-brush') {
+        } else if (this.currentFogTool === 'fog-brush' || this.currentFogTool === 'reveal-brush') {
             console.log('Starting fog drawing with tool:', this.fogTool);
             
             // Ensure fog canvas is properly sized before drawing
@@ -703,6 +829,12 @@ class BattlemapDM {
                 this.canvas.style.cursor = 'default';
                 document.getElementById('statusText').textContent = 'Ready';
             }
+        }
+        
+        // Ctrl/Cmd + B to toggle sidebar
+        if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+            e.preventDefault();
+            this.toggleSidebar();
         }
     }
     
@@ -1221,7 +1353,7 @@ class BattlemapDM {
         this.ctx.save();
         
         // Set brush preview style
-        this.ctx.strokeStyle = this.fogTool === 'fog-brush' ? 'rgba(255, 0, 0, 0.7)' : 'rgba(0, 255, 0, 0.7)';
+        this.ctx.strokeStyle = this.currentFogTool === 'fog-brush' ? 'rgba(255, 0, 0, 0.7)' : 'rgba(0, 255, 0, 0.7)';
         this.ctx.lineWidth = this.fogBrushSize;
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
@@ -1537,6 +1669,12 @@ class BattlemapDM {
             tab.innerHTML = `
                 <span class="map-tab-name">${map.name}</span>
                 <div class="map-tab-actions">
+                    <button onclick="battlemapDM.exportMap('${map.id}')" title="Export">
+                        <i class="fas fa-upload"></i>
+                    </button>
+                    <button onclick="battlemapDM.renameMap('${map.id}')" title="Rename">
+                        <i class="fas fa-edit"></i>
+                    </button>
                     <button onclick="battlemapDM.setActiveMap('${map.id}')" title="Set Active for Players" class="${isActive ? 'active-btn' : ''}">
                         <i class="fas fa-eye"></i>
                     </button>
@@ -1650,6 +1788,145 @@ class BattlemapDM {
         }
     }
     
+    renameMap(mapId) {
+        const map = this.maps.get(mapId);
+        if (!map) return;
+        
+        const newName = prompt('Enter new name for this map:', map.name);
+        
+        if (newName !== null && newName.trim() !== '') {
+            map.name = newName.trim();
+            
+            // Update the map on the server
+            fetch(`/api/adventures/${this.adventureId}/maps/${mapId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(map)
+            }).then(response => {
+                if (response.ok) {
+                    this.updateMapTabs();
+                } else {
+                    console.error('Failed to rename map');
+                }
+            }).catch(error => {
+                console.error('Error renaming map:', error);
+            });
+        }
+    }
+    
+    exportMap(mapId) {
+        const map = this.maps.get(mapId);
+        if (!map) return;
+        
+        // Create export data
+        const exportData = {
+            version: '1.0',
+            exportDate: new Date().toISOString(),
+            map: {
+                name: map.name,
+                backgroundImage: map.backgroundImage,
+                fogDataUrl: map.fogDataUrl,
+                layers: map.layers
+            }
+        };
+        
+        // Convert to JSON and create download
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        
+        // Create download link
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${map.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_export.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        console.log('Map exported:', map.name);
+    }
+    
+    importMap() {
+        // Create file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json';
+        fileInput.style.display = 'none';
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const importData = JSON.parse(event.target.result);
+                    
+                    // Validate import data
+                    if (!importData.map || !importData.map.name) {
+                        alert('Invalid map export file');
+                        return;
+                    }
+                    
+                    // Check if map name already exists
+                    const existingMap = Array.from(this.maps.values()).find(m => m.name === importData.map.name);
+                    if (existingMap) {
+                        const newName = prompt('A map with this name already exists. Enter a new name:', importData.map.name + '_imported');
+                        if (!newName || newName.trim() === '') return;
+                        importData.map.name = newName.trim();
+                    }
+                    
+                    // Create new map with imported data
+                    const newMapId = uuidv4();
+                    const newMap = {
+                        id: newMapId,
+                        name: importData.map.name,
+                        backgroundImage: importData.map.backgroundImage,
+                        fogDataUrl: importData.map.fogDataUrl,
+                        layers: importData.map.layers || []
+                    };
+                    
+                    // Add map to local state
+                    this.maps.set(newMapId, newMap);
+                    
+                    // Save to server
+                    fetch(`/api/adventures/${this.adventureId}/maps`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(newMap)
+                    }).then(response => {
+                        if (response.ok) {
+                            this.updateMapTabs();
+                            this.setViewingMap(newMapId);
+                            console.log('Map imported successfully:', newMap.name);
+                        } else {
+                            console.error('Failed to import map');
+                            alert('Failed to import map');
+                        }
+                    }).catch(error => {
+                        console.error('Error importing map:', error);
+                        alert('Error importing map');
+                    });
+                    
+                } catch (error) {
+                    console.error('Error parsing import file:', error);
+                    alert('Invalid import file format');
+                }
+            };
+            
+            reader.readAsText(file);
+        });
+        
+        document.body.appendChild(fileInput);
+        fileInput.click();
+        document.body.removeChild(fileInput);
+    }
+    
     updateLayerList() {
         const container = document.getElementById('layerList');
         if (!container) {
@@ -1682,9 +1959,12 @@ class BattlemapDM {
                     <button class="layer-visibility" onclick="battlemapDM.toggleLayerVisibility('${layer.id}')">
                         <i class="fas fa-${layer.visible !== false ? 'eye' : 'eye-slash'}"></i>
                     </button>
-                    <span>${layer.name || layer.type} - ${layer.id.slice(0, 8)}</span>
+                    <span>${layer.name || layer.type}</span>
                 </div>
                 <div class="layer-actions">
+                    <button onclick="battlemapDM.renameLayer('${layer.id}')" title="Rename">
+                        <i class="fas fa-edit"></i>
+                    </button>
                     <button onclick="battlemapDM.selectLayer('${layer.id}')" title="Select">
                         <i class="fas fa-mouse-pointer"></i>
                     </button>
@@ -1861,9 +2141,51 @@ class BattlemapDM {
         }
     }
     
+    renameLayer(layerId) {
+        const map = this.maps.get(this.viewingMapId);
+        if (!map) return;
+        
+        const layer = map.layers.find(l => l.id === layerId);
+        if (!layer) return;
+        
+        const currentName = layer.name || layer.type;
+        const newName = prompt('Enter new name for this layer:', currentName);
+        
+        if (newName !== null && newName.trim() !== '') {
+            layer.name = newName.trim();
+            
+            // Update the layer on the server
+            fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}/layers/${layerId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(layer)
+            }).then(response => {
+                if (response.ok) {
+                    this.updateLayerList();
+                    this.render();
+                } else {
+                    console.error('Failed to rename layer');
+                }
+            });
+        }
+    }
+    
     closeModals() {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.style.display = 'none';
+            
+            // If closing spell search modal, hide spell from player and sticky buttons
+            if (modal.id === 'spellSearchModal') {
+                this.hideSpellFromPlayer();
+                document.getElementById('stickySpellBtn').style.display = 'none';
+            }
+            
+            // If closing monster search modal, hide sticky button
+            if (modal.id === 'monsterSearchModal') {
+                document.getElementById('stickyMonsterBtn').style.display = 'none';
+            }
         });
     }
     
@@ -2040,6 +2362,22 @@ class BattlemapDM {
         
         this.updatePlayersList();
         this.savePlayers();
+    }
+    
+    endCombat() {
+        // Zero all initiative values
+        this.players.forEach(player => {
+            player.initiative = 0;
+        });
+        
+        // Remove active and next player states
+        this.currentActivePlayerId = null;
+        
+        // Update the display
+        this.updatePlayersList();
+        this.savePlayers();
+        
+        console.log('Combat ended - all initiative reset to 0');
     }
     
     savePlayers() {
@@ -2551,8 +2889,8 @@ class BattlemapDM {
         }
         
         // Draw on the fog bitmap using world coordinates
-        this.fogCtx.globalCompositeOperation = this.fogTool === 'fog-brush' ? 'source-over' : 'destination-out';
-        this.fogCtx.strokeStyle = this.fogTool === 'fog-brush' ? 'black' : 'white';
+        this.fogCtx.globalCompositeOperation = this.currentFogTool === 'fog-brush' ? 'source-over' : 'destination-out';
+        this.fogCtx.strokeStyle = this.currentFogTool === 'fog-brush' ? 'black' : 'white';
         this.fogCtx.lineWidth = this.fogBrushSize;
         this.fogCtx.lineCap = 'round';
         this.fogCtx.lineJoin = 'round';
@@ -2945,6 +3283,479 @@ class BattlemapDM {
         document.querySelectorAll('.section-header').forEach(header => {
             header.classList.add('collapsed');
         });
+    }
+    
+    // SRD 5e Spell and Monster Search Methods
+    showSpellSearchModal() {
+        const spellsData = localStorage.getItem('spellsData');
+        if (!spellsData) {
+            alert('Please download spells data first from the start screen.');
+            return;
+        }
+        
+        document.getElementById('spellSearchModal').style.display = 'block';
+        document.getElementById('spellSearch').value = '';
+        document.getElementById('spellSearchResults').innerHTML = '';
+        document.getElementById('spellDetailsSection').style.display = 'none';
+        document.getElementById('showSpellToPlayerBtn').style.display = 'none';
+        this.currentSpell = null;
+        document.getElementById('spellSearch').focus();
+    }
+    
+    showMonsterSearchModal() {
+        const monstersData = localStorage.getItem('monstersData');
+        if (!monstersData) {
+            alert('Please download monsters data first from the start screen.');
+            return;
+        }
+        
+        document.getElementById('monsterSearchModal').style.display = 'block';
+        document.getElementById('monsterSearch').value = '';
+        document.getElementById('monsterSearchResults').innerHTML = '';
+        document.getElementById('monsterDetailsSection').style.display = 'none';
+        document.getElementById('monsterSearch').focus();
+    }
+    
+    searchSpells(query) {
+        const spellsData = localStorage.getItem('spellsData');
+        if (!spellsData) return;
+        
+        try {
+            const spells = JSON.parse(spellsData);
+            const results = spells.filter(spell => 
+                spell.name && spell.name.toLowerCase().includes(query.toLowerCase())
+            ).slice(0, 20); // Limit to 20 results
+            
+            this.displaySpellSearchResults(results);
+        } catch (error) {
+            console.error('Error searching spells:', error);
+        }
+    }
+    
+    searchMonsters(query) {
+        const monstersData = localStorage.getItem('monstersData');
+        if (!monstersData) return;
+        
+        try {
+            const monsters = JSON.parse(monstersData);
+            const results = monsters.filter(monster => 
+                monster.name && monster.name.toLowerCase().includes(query.toLowerCase())
+            ).slice(0, 20); // Limit to 20 results
+            
+            this.displayMonsterSearchResults(results);
+        } catch (error) {
+            console.error('Error searching monsters:', error);
+        }
+    }
+    
+    displaySpellSearchResults(spells) {
+        const resultsContainer = document.getElementById('spellSearchResults');
+        
+        if (spells.length === 0) {
+            resultsContainer.innerHTML = '<div class="no-results">No spells found</div>';
+            return;
+        }
+        
+        resultsContainer.innerHTML = spells.map(spell => `
+            <div class="spell-result-item" onclick="battlemapDM.showSpellDetails('${spell.name}')">
+                <div class="spell-result-info">
+                    <div class="spell-result-name">${spell.name}</div>
+                    <div class="spell-result-meta">
+                        ${spell.level ? `Level ${spell.level}` : ''} 
+                        ${spell.school ? `• ${spell.school}` : ''}
+                        ${spell.casting_time ? `• ${spell.casting_time}` : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    displayMonsterSearchResults(monsters) {
+        const resultsContainer = document.getElementById('monsterSearchResults');
+        
+        if (monsters.length === 0) {
+            resultsContainer.innerHTML = '<div class="no-results">No monsters found</div>';
+            return;
+        }
+        
+        resultsContainer.innerHTML = monsters.map(monster => `
+            <div class="monster-result-item" onclick="battlemapDM.showMonsterDetails('${monster.name}')">
+                <div class="monster-result-info">
+                    <div class="monster-result-name">${monster.name}</div>
+                    <div class="monster-result-meta">
+                        ${monster.type ? `• ${monster.type}` : ''} 
+                        ${monster.size ? `• ${monster.size}` : ''}
+                        ${monster.challenge_rating ? `• CR ${monster.challenge_rating}` : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    showSpellDetails(spellName) {
+        const spellsData = localStorage.getItem('spellsData');
+        if (!spellsData) return;
+        
+        try {
+            const spells = JSON.parse(spellsData);
+            const spell = spells.find(s => s.name === spellName);
+            
+            if (!spell) return;
+            
+            // Store the current spell for "Show to Player" functionality
+            this.currentSpell = spell;
+            
+            const detailsTable = document.getElementById('spellDetailsTable');
+            detailsTable.innerHTML = this.createSpellDetailsTable(spell);
+            
+            document.getElementById('spellDetailsSection').style.display = 'block';
+            
+            // Show the "Show to Player" and "Sticky" buttons
+            document.getElementById('showSpellToPlayerBtn').style.display = 'inline-flex';
+            document.getElementById('stickySpellBtn').style.display = 'inline-flex';
+        } catch (error) {
+            console.error('Error showing spell details:', error);
+        }
+    }
+    
+    showSpellToPlayer() {
+        if (!this.currentSpell) return;
+        
+        // Send spell data to players via Socket.IO
+        this.socket.emit('show-spell-to-player', {
+            adventureId: this.adventureId,
+            spell: this.currentSpell
+        });
+        
+        console.log('Showing spell to player:', this.currentSpell.name);
+        
+        // Change button text to "Rotate 90°"
+        const showSpellBtn = document.getElementById('showSpellToPlayerBtn');
+        if (showSpellBtn) {
+            showSpellBtn.innerHTML = '<i class="fas fa-redo"></i> Rotate 90°';
+            showSpellBtn.onclick = () => this.rotateSpellOverlay();
+        }
+    }
+    
+    rotateSpellOverlay() {
+        // Send rotate command to players via Socket.IO
+        this.socket.emit('rotate-spell-overlay', {
+            adventureId: this.adventureId
+        });
+        
+        console.log('Rotating spell overlay');
+    }
+    
+    hideSpellFromPlayer() {
+        // Send hide spell signal to players via Socket.IO
+        this.socket.emit('hide-spell-from-player', {
+            adventureId: this.adventureId
+        });
+        
+        console.log('Hiding spell from player');
+        
+        // Reset button back to "Show to Player"
+        const showSpellBtn = document.getElementById('showSpellToPlayerBtn');
+        if (showSpellBtn) {
+            showSpellBtn.innerHTML = '<i class="fas fa-eye"></i> Show to Player';
+            showSpellBtn.onclick = () => this.showSpellToPlayer();
+        }
+    }
+    
+    showMonsterDetails(monsterName) {
+        const monstersData = localStorage.getItem('monstersData');
+        if (!monstersData) return;
+        
+        try {
+            const monsters = JSON.parse(monstersData);
+            const monster = monsters.find(m => m.name === monsterName);
+            
+            if (!monster) return;
+            
+            // Store the current monster for sticky window
+            this.currentMonster = monster;
+            
+            const detailsTable = document.getElementById('monsterDetailsTable');
+            detailsTable.innerHTML = this.createMonsterDetailsTable(monster);
+            
+            document.getElementById('monsterDetailsSection').style.display = 'block';
+            document.getElementById('stickyMonsterBtn').style.display = 'inline-flex';
+        } catch (error) {
+            console.error('Error showing monster details:', error);
+        }
+    }
+    
+    createSpellDetailsTable(spell) {
+        const rows = [];
+        
+        // Add all spell properties as table rows
+        for (const [key, value] of Object.entries(spell)) {
+            if (value !== null && value !== undefined) {
+                const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                let formattedValue = value;
+                
+                // Handle arrays and objects
+                if (Array.isArray(value)) {
+                    formattedValue = value.join(', ');
+                } else if (typeof value === 'object') {
+                    formattedValue = JSON.stringify(value, null, 2);
+                }
+                
+                rows.push(`
+                    <tr>
+                        <th>${formattedKey}</th>
+                        <td>${formattedValue}</td>
+                    </tr>
+                `);
+            }
+        }
+        
+        return `<table>${rows.join('')}</table>`;
+    }
+    
+    createMonsterDetailsTable(monster) {
+        const rows = [];
+        
+        // Add all monster properties as table rows
+        for (const [key, value] of Object.entries(monster)) {
+            if (value !== null && value !== undefined) {
+                const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                let formattedValue = value;
+                
+                // Handle arrays and objects
+                if (Array.isArray(value)) {
+                    formattedValue = value.join(', ');
+                } else if (typeof value === 'object') {
+                    formattedValue = JSON.stringify(value, null, 2);
+                }
+                
+                rows.push(`
+                    <tr>
+                        <th>${formattedKey}</th>
+                        <td>${formattedValue}</td>
+                    </tr>
+                `);
+            }
+        }
+        
+        return `<table>${rows.join('')}</table>`;
+    }
+    
+    createStickySpellWindow() {
+        console.log('createStickySpellWindow called, currentSpell:', this.currentSpell);
+        if (!this.currentSpell) {
+            console.log('No currentSpell found, returning');
+            return;
+        }
+        
+        const container = document.getElementById('stickyWindowsContainer');
+        const windowId = `sticky-spell-${Date.now()}`;
+        
+        const stickyWindow = document.createElement('div');
+        stickyWindow.className = 'sticky-window';
+        stickyWindow.id = windowId;
+        stickyWindow.style.left = '50px';
+        stickyWindow.style.top = '50px';
+        
+        const metaInfo = [];
+        if (this.currentSpell.level) metaInfo.push(`<span>Level ${this.currentSpell.level}</span>`);
+        if (this.currentSpell.school) metaInfo.push(`<span>${this.currentSpell.school}</span>`);
+        if (this.currentSpell.casting_time) metaInfo.push(`<span>${this.currentSpell.casting_time}</span>`);
+        if (this.currentSpell.range) metaInfo.push(`<span>Range: ${this.currentSpell.range}</span>`);
+        if (this.currentSpell.duration) metaInfo.push(`<span>${this.currentSpell.duration}</span>`);
+        if (this.currentSpell.components) {
+            // Handle components object structure
+            let componentsText = '';
+            if (typeof this.currentSpell.components === 'object' && this.currentSpell.components.raw) {
+                componentsText = this.currentSpell.components.raw;
+            } else if (typeof this.currentSpell.components === 'string') {
+                componentsText = this.currentSpell.components;
+            }
+            if (componentsText) metaInfo.push(`<span>${componentsText}</span>`);
+        }
+        
+        stickyWindow.innerHTML = `
+            <div class="sticky-window-header">
+                <h3 class="sticky-window-title">
+                    <i class="fas fa-magic"></i> ${this.currentSpell.name}
+                </h3>
+                <div class="sticky-window-controls">
+                    <button class="sticky-window-btn close-btn" onclick="battlemapDM.closeStickyWindow('${windowId}')">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="sticky-window-content">
+                <div class="meta-info">
+                    ${metaInfo.join('')}
+                </div>
+                <h4>Description</h4>
+                <p>${this.currentSpell.description || 'No description available.'}</p>
+                ${this.currentSpell.higher_levels ? `<h4>At Higher Levels</h4><p>${this.currentSpell.higher_levels}</p>` : ''}
+                ${this.currentSpell.ritual ? `<p><strong>Ritual:</strong> Yes</p>` : ''}
+                ${this.currentSpell.concentration ? `<p><strong>Concentration:</strong> Yes</p>` : ''}
+            </div>
+        `;
+        
+        container.appendChild(stickyWindow);
+        this.makeWindowDraggable(stickyWindow);
+        
+        // Hide the spell from player when creating sticky window
+        this.hideSpellFromPlayer();
+        
+        // Close the modal
+        document.getElementById('spellSearchModal').style.display = 'none';
+    }
+    
+    createStickyMonsterWindow() {
+        if (!this.currentMonster) return;
+        
+        const container = document.getElementById('stickyWindowsContainer');
+        const windowId = `sticky-monster-${Date.now()}`;
+        
+        const stickyWindow = document.createElement('div');
+        stickyWindow.className = 'sticky-window';
+        stickyWindow.id = windowId;
+        stickyWindow.style.left = '100px';
+        stickyWindow.style.top = '100px';
+        
+        const metaInfo = [];
+        if (this.currentMonster.meta) metaInfo.push(`<span>${this.currentMonster.meta}</span>`);
+        if (this.currentMonster['Armor Class']) metaInfo.push(`<span>AC: ${this.currentMonster['Armor Class']}</span>`);
+        if (this.currentMonster['Hit Points']) metaInfo.push(`<span>HP: ${this.currentMonster['Hit Points']}</span>`);
+        if (this.currentMonster.Challenge) metaInfo.push(`<span>CR: ${this.currentMonster.Challenge}</span>`);
+        
+        stickyWindow.innerHTML = `
+            <div class="sticky-window-header">
+                <h3 class="sticky-window-title">
+                    <i class="fas fa-dragon"></i> ${this.currentMonster.name}
+                </h3>
+                <div class="sticky-window-controls">
+                    <button class="sticky-window-btn close-btn" onclick="battlemapDM.closeStickyWindow('${windowId}')">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="sticky-window-content">
+                <div class="meta-info">
+                    ${metaInfo.join('')}
+                </div>
+                <h4>Description</h4>
+                ${this.currentMonster.Speed ? `<h4>Speed</h4><p>${this.currentMonster.Speed}</p>` : ''}
+                
+                <div class="ability-scores">
+                    <h4>Ability Scores</h4>
+                    <div class="abilities-grid">
+                        ${this.currentMonster.STR ? `<div><strong>STR:</strong> ${this.currentMonster.STR} (${this.currentMonster.STR_mod || ''})</div>` : ''}
+                        ${this.currentMonster.DEX ? `<div><strong>DEX:</strong> ${this.currentMonster.DEX} (${this.currentMonster.DEX_mod || ''})</div>` : ''}
+                        ${this.currentMonster.CON ? `<div><strong>CON:</strong> ${this.currentMonster.CON} (${this.currentMonster.CON_mod || ''})</div>` : ''}
+                        ${this.currentMonster.INT ? `<div><strong>INT:</strong> ${this.currentMonster.INT} (${this.currentMonster.INT_mod || ''})</div>` : ''}
+                        ${this.currentMonster.WIS ? `<div><strong>WIS:</strong> ${this.currentMonster.WIS} (${this.currentMonster.WIS_mod || ''})</div>` : ''}
+                        ${this.currentMonster.CHA ? `<div><strong>CHA:</strong> ${this.currentMonster.CHA} (${this.currentMonster.CHA_mod || ''})</div>` : ''}
+                    </div>
+                </div>
+                
+                ${this.currentMonster['Saving Throws'] ? `<h4>Saving Throws</h4><p>${this.currentMonster['Saving Throws']}</p>` : ''}
+                ${this.currentMonster.Skills ? `<h4>Skills</h4><p>${this.currentMonster.Skills}</p>` : ''}
+                ${this.currentMonster['Damage Resistances'] ? `<h4>Damage Resistances</h4><p>${this.currentMonster['Damage Resistances']}</p>` : ''}
+                ${this.currentMonster['Damage Immunities'] ? `<h4>Damage Immunities</h4><p>${this.currentMonster['Damage Immunities']}</p>` : ''}
+                ${this.currentMonster['Condition Immunities'] ? `<h4>Condition Immunities</h4><p>${this.currentMonster['Condition Immunities']}</p>` : ''}
+                ${this.currentMonster.Senses ? `<h4>Senses</h4><p>${this.currentMonster.Senses}</p>` : ''}
+                ${this.currentMonster.Languages ? `<h4>Languages</h4><p>${this.currentMonster.Languages}</p>` : ''}
+                ${this.currentMonster.Traits ? `<h4>Traits</h4><div>${this.currentMonster.Traits}</div>` : ''}
+                ${this.currentMonster.Actions ? `<h4>Actions</h4><div>${this.currentMonster.Actions}</div>` : ''}
+                ${this.currentMonster.Reactions ? `<h4>Reactions</h4><div>${this.currentMonster.Reactions}</div>` : ''}
+                ${this.currentMonster['Legendary Actions'] ? `<h4>Legendary Actions</h4><div>${this.currentMonster['Legendary Actions']}</div>` : ''}
+            </div>
+        `;
+        
+        container.appendChild(stickyWindow);
+        this.makeWindowDraggable(stickyWindow);
+        
+        // Close the modal
+        document.getElementById('monsterSearchModal').style.display = 'none';
+    }
+    
+    closeStickyWindow(windowId) {
+        const window = document.getElementById(windowId);
+        if (window) {
+            window.remove();
+        }
+    }
+    
+    makeWindowDraggable(window) {
+        const header = window.querySelector('.sticky-window-header');
+        let isDragging = false;
+        let currentX;
+        let currentY;
+        let initialX;
+        let initialY;
+        let xOffset = 0;
+        let yOffset = 0;
+        
+        header.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            initialX = e.clientX - xOffset;
+            initialY = e.clientY - yOffset;
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                e.preventDefault();
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+                xOffset = currentX;
+                yOffset = currentY;
+                
+                window.style.transform = `translate(${currentX}px, ${currentY}px)`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+    }
+    
+    toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.querySelector('.main-content');
+        const hamburgerBtn = document.getElementById('sidebarToggleBtn');
+        
+        if (sidebar.classList.contains('collapsed')) {
+            sidebar.classList.remove('collapsed');
+            mainContent.classList.remove('sidebar-collapsed');
+            hamburgerBtn.innerHTML = '<i class="fas fa-bars"></i>';
+        } else {
+            sidebar.classList.add('collapsed');
+            mainContent.classList.add('sidebar-collapsed');
+            hamburgerBtn.innerHTML = '<i class="fas fa-bars"></i>';
+        }
+    }
+    
+
+    
+    updateFogButtonStates() {
+        // Update overlay fog buttons
+        document.querySelectorAll('.fog-controls-overlay .fog-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Update main sidebar fog buttons
+        document.querySelectorAll('.fog-tool-group .tool-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        if (this.currentFogTool === 'select') {
+            document.getElementById('arrowToolBtnOverlay')?.classList.add('active');
+            // Also update the drawing tool select button to be active
+            document.getElementById('selectTool')?.classList.add('active');
+        } else if (this.currentFogTool === 'fog-brush') {
+            document.getElementById('fogBrushBtnOverlay')?.classList.add('active');
+            document.getElementById('fogBrushBtn')?.classList.add('active');
+        } else if (this.currentFogTool === 'reveal-brush') {
+            document.getElementById('revealBrushBtnOverlay')?.classList.add('active');
+            document.getElementById('revealBrushBtn')?.classList.add('active');
+        }
     }
 }
 

@@ -17,6 +17,36 @@ body {
     display: flex;
     height: 100vh;
     width: 100vw;
+    position: relative;
+}
+
+/* Sidebar Toggle */
+.sidebar-toggle {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 200;
+}
+
+.hamburger-btn {
+    width: 50px;
+    height: 50px;
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid #555;
+    color: white;
+    cursor: pointer;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    transition: all 0.3s ease;
+}
+
+.hamburger-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+    border-color: #666;
+    transform: scale(1.05);
 }
 
 /* Sidebar Styles */
@@ -28,6 +58,14 @@ body {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    transition: width 0.3s ease, transform 0.3s ease;
+    position: relative;
+    z-index: 150;
+}
+
+.sidebar.collapsed {
+    width: 0;
+    transform: translateX(-100%);
 }
 
 .sidebar-header {
@@ -39,6 +77,7 @@ body {
 .sidebar-header h2 {
     color: #ffd700;
     font-size: 1.5rem;
+    text-align: center;
 }
 
 .build-info {
@@ -157,6 +196,19 @@ body {
 
 .btn-danger:hover {
     background: #c82333;
+}
+
+/* Map Controls */
+.map-buttons {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.map-buttons .btn {
+    flex: 1;
+    font-size: 12px;
+    padding: 6px 8px;
 }
 
 /* Map Tabs */
@@ -425,6 +477,16 @@ body {
     font-size: 14px;
 }
 
+.combat-controls {
+    margin: 15px 0;
+    text-align: center;
+}
+
+.combat-controls .btn {
+    width: 100%;
+    margin-bottom: 10px;
+}
+
 .add-player-form {
     background: #3d3d3d;
     padding: 15px;
@@ -545,7 +607,6 @@ body {
 }
 
 .player-item.next {
-    background: rgba(255, 193, 7, 0.1);
     border-color: rgba(255, 193, 7, 0.5);
 }
 
@@ -637,6 +698,7 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
+    transition: margin-left 0.3s ease;
 }
 
 .canvas-container {
@@ -669,6 +731,41 @@ canvas {
     flex-direction: column;
     gap: 5px;
     pointer-events: auto;
+}
+
+.fog-controls-overlay {
+    position: absolute;
+    top: 20px;
+    right: 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    pointer-events: auto;
+}
+
+.fog-btn {
+    width: 40px;
+    height: 40px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid #555;
+    color: white;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.fog-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+    border-color: #666;
+}
+
+.fog-btn.active {
+    background: #007bff;
+    border-color: #0056b3;
+    color: white;
 }
 
 .zoom-btn {
@@ -1431,6 +1528,379 @@ canvas {
     font-size: 0.8rem;
     margin-top: 5px;
     display: block;
+}
+
+/* JSON Download Section */
+.json-download-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.download-description {
+    color: #ccc;
+    font-style: italic;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.download-item {
+    background: #3d3d3d;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 20px;
+    transition: all 0.2s ease;
+}
+
+.download-item:hover {
+    border-color: #666;
+}
+
+.download-item h3 {
+    color: #ffd700;
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.download-status {
+    margin-top: 10px;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.download-status.success {
+    background: rgba(40, 167, 69, 0.2);
+    border: 1px solid rgba(40, 167, 69, 0.5);
+    color: #28a745;
+}
+
+.download-status.error {
+    background: rgba(220, 53, 69, 0.2);
+    border: 1px solid rgba(220, 53, 69, 0.5);
+    color: #dc3545;
+}
+
+.download-status.loading {
+    background: rgba(255, 193, 7, 0.2);
+    border: 1px solid rgba(255, 193, 7, 0.5);
+    color: #ffc107;
+}
+
+/* SRD 5e Controls */
+.srd-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.srd-controls .btn {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+}
+
+/* Spell and Monster Search Results */
+.spell-search-results,
+.monster-search-results {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #2d2d2d;
+    margin-top: 10px;
+}
+
+.spell-result-item,
+.monster-result-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #444;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.spell-result-item:hover,
+.monster-result-item:hover {
+    background: #3d3d3d;
+}
+
+.spell-result-item:last-child,
+.monster-result-item:last-child {
+    border-bottom: none;
+}
+
+.spell-result-item.selected,
+.monster-result-item.selected {
+    background: #007bff;
+    color: white;
+}
+
+.spell-result-info,
+.monster-result-info {
+    flex: 1;
+}
+
+.spell-result-name,
+.monster-result-name {
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.spell-result-meta,
+.monster-result-meta {
+    font-size: 0.8rem;
+    color: #888;
+}
+
+/* Spell and Monster Details Tables */
+.spell-details-section,
+.monster-details-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #555;
+}
+
+.spell-details-table,
+.monster-details-table {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #2d2d2d;
+}
+
+.spell-details-table table,
+.monster-details-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.spell-details-table th,
+.spell-details-table td,
+.monster-details-table th,
+.monster-details-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #444;
+}
+
+.spell-details-table th,
+.monster-details-table th {
+    background: #3d3d3d;
+    font-weight: 500;
+    color: #ffd700;
+}
+
+.spell-details-table tr:hover,
+.monster-details-table tr:hover {
+    background: #3d3d3d;
+}
+
+/* Sticky Windows Container */
+.sticky-windows-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 150;
+}
+
+/* Sticky Window */
+.sticky-window {
+    position: absolute;
+    background: #2d2d2d;
+    border: 2px solid #ffd700;
+    border-radius: 8px;
+    min-width: 300px;
+    max-width: 500px;
+    max-height: 600px;
+    overflow: hidden;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+    pointer-events: auto;
+    z-index: 160;
+}
+
+.sticky-window-header {
+    background: #3d3d3d;
+    padding: 10px 15px;
+    border-bottom: 1px solid #555;
+    cursor: move;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sticky-window-title {
+    color: #ffd700;
+    margin: 0;
+    font-size: 14px;
+    font-weight: bold;
+    flex: 1;
+}
+
+.sticky-window-controls {
+    display: flex;
+    gap: 5px;
+}
+
+.sticky-window-btn {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.sticky-window-btn:hover {
+    background: #555;
+    color: #fff;
+}
+
+.sticky-window-btn.close-btn:hover {
+    background: #d32f2f;
+}
+
+.sticky-window-content {
+    padding: 15px;
+    max-height: 500px;
+    overflow-y: auto;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.sticky-window-content h4 {
+    color: #ffd700;
+    margin: 0 0 10px 0;
+    font-size: 13px;
+}
+
+.sticky-window-content p {
+    margin: 5px 0;
+}
+
+.abilities-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.abilities-grid div {
+    background: #1a1a1a;
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.sticky-window-content .meta-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 8px;
+    background: #3d3d3d;
+    border-radius: 4px;
+}
+
+.sticky-window-content .meta-info span {
+    background: #555;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+/* Spell Overlay for Player Screen */
+.spell-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    pointer-events: auto;
+}
+
+.spell-overlay-content {
+    background: #2d2d2d;
+    border: 2px solid #ffd700;
+    border-radius: 8px;
+    max-width: 90%;
+    max-height: 90%;
+    width: 600px;
+    overflow: hidden;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+
+.spell-overlay-header {
+    background: #3d3d3d;
+    padding: 20px;
+    border-bottom: 1px solid #555;
+}
+
+.spell-overlay-header h3 {
+    color: #ffd700;
+    margin: 0 0 10px 0;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.spell-overlay-meta {
+    color: #ccc;
+    font-size: 0.9rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.spell-overlay-meta span {
+    background: #2d2d2d;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #555;
+}
+
+.spell-overlay-body {
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+    color: #fff;
+    line-height: 1.6;
+}
+
+.spell-overlay-body h4 {
+    color: #ffd700;
+    margin: 15px 0 8px 0;
+    font-size: 1.1rem;
+}
+
+.spell-overlay-body p {
+    margin: 8px 0;
+}
+
+.spell-overlay-body ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.spell-overlay-body li {
+    margin: 4px 0;
 }
 
 /* Responsive Design for Adventure Selection */

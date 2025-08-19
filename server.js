@@ -709,6 +709,27 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('players-updated', data);
     });
     
+    // Forward spell display to players
+    socket.on('show-spell-to-player', (data) => {
+        console.log('Forwarding spell to player:', data.spell.name);
+        // Broadcast to all clients except the sender
+        socket.broadcast.emit('show-spell-to-player', data);
+    });
+    
+    // Forward spell hide from players
+    socket.on('hide-spell-from-player', (data) => {
+        console.log('Hiding spell from player');
+        // Broadcast to all clients except the sender
+        socket.broadcast.emit('hide-spell-from-player', data);
+    });
+    
+    // Forward spell overlay rotation to players
+    socket.on('rotate-spell-overlay', (data) => {
+        console.log('Rotating spell overlay');
+        // Broadcast to all clients except the sender
+        socket.broadcast.emit('rotate-spell-overlay', data);
+    });
+    
     socket.on('disconnect', () => {
         console.log('Client disconnected');
     });
