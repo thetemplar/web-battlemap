@@ -1,4 +1,4 @@
-# D&D Battlemap with Fog of War
+# D&D Battlemap with Fog of War with Focus on TV-Table-Sessions
 
 A real-time web application for D&D battlemaps with fog of war, drawing tools, and layer management. Features separate DM and player interfaces with real-time synchronization, adventure management, and password protection.
 
