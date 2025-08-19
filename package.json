@@ -11,17 +11,22 @@
     "docker-run": "docker run -p 3000:3000 dnd-battlemap"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-    "multer": "^1.4.5-lts.1",
-    "uuid": "^9.0.0",
+    "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
-    "bcrypt": "^5.1.1"
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "socket.io": "^4.7.2",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["dnd", "battlemap", "fog-of-war", "drawing"],
+  "keywords": [
+    "dnd",
+    "battlemap",
+    "fog-of-war",
+    "drawing"
+  ],
   "author": "D&D Battlemap Team",
   "license": "MIT"
-} 
+}

@@ -290,13 +290,7 @@ class BattlemapDM {
             });
         }
         
-        // Sidebar toggle button
-        const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
-        if (sidebarToggleBtn) {
-            sidebarToggleBtn.addEventListener('click', () => {
-                this.toggleSidebar();
-            });
-        }
+
         
         // Fog controls overlay buttons
         const arrowToolBtnOverlay = document.getElementById('arrowToolBtnOverlay');
@@ -831,11 +825,7 @@ class BattlemapDM {
             }
         }
         
-        // Ctrl/Cmd + B to toggle sidebar
-        if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
-            e.preventDefault();
-            this.toggleSidebar();
-        }
+
     }
     
     handleSelectMouseDown(x, y) {
@@ -3716,21 +3706,7 @@ class BattlemapDM {
         });
     }
     
-    toggleSidebar() {
-        const sidebar = document.getElementById('sidebar');
-        const mainContent = document.querySelector('.main-content');
-        const hamburgerBtn = document.getElementById('sidebarToggleBtn');
-        
-        if (sidebar.classList.contains('collapsed')) {
-            sidebar.classList.remove('collapsed');
-            mainContent.classList.remove('sidebar-collapsed');
-            hamburgerBtn.innerHTML = '<i class="fas fa-bars"></i>';
-        } else {
-            sidebar.classList.add('collapsed');
-            mainContent.classList.add('sidebar-collapsed');
-            hamburgerBtn.innerHTML = '<i class="fas fa-bars"></i>';
-        }
-    }
+
     
 
     
