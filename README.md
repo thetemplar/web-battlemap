@@ -2,8 +2,14 @@
 
 A real-time web application for D&D battlemaps with fog of war, drawing tools, and layer management. Features separate DM and player interfaces with real-time synchronization, adventure management, and password protection.
 
-![login](https://raw.githubusercontent.com/thetemplar/web-battlemap/refs/heads/main/images-for-gitlab/login.PNG)
+Login:
+![login](https://github.com/thetemplar/web-battlemap/blob/main/images-for-gitlab/login.PNG)
+
+DM Screen:
 ![overview](https://raw.githubusercontent.com/thetemplar/web-battlemap/refs/heads/main/images-for-gitlab/Overview.PNG)
+
+Player:
+![player](https://raw.githubusercontent.com/thetemplar/web-battlemap/refs/heads/main/images-for-gitlab/Player.PNG)
 
 ## Features
 
