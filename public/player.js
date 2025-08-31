@@ -47,6 +47,7 @@ class BattlemapPlayer {
         this.battlegridOffsetX = 0;
         this.battlegridOffsetY = 0;
         this.battlegridColor = '#ffffff';
+        this.battlegridScaleFactor = 1.5; // meters per grid unit
         
         // Initialize
         this.initializeCanvas();
@@ -346,6 +347,13 @@ class BattlemapPlayer {
                     this.drawLayer(layer);
                 }
             });
+
+            // Draw measurements for layers that have showMeasurements enabled
+            map.layers.forEach(layer => {
+                if (layer.visible !== false && layer.showMeasurements) {
+                    this.drawLayerMeasurements(layer);
+                }
+            });
             
             // Draw fog of war (after transformations so it moves with the map)
             this.drawFogOfWar(map);
@@ -445,6 +453,81 @@ class BattlemapPlayer {
         }
         
         this.ctx.restore();
+    }
+
+    drawLayerMeasurements(layer) {
+        this.ctx.save();
+        
+        // Set text properties for measurements
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 2;
+        this.ctx.font = '14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        
+        let measurementText = '';
+        let textX = 0;
+        let textY = 0;
+        
+        switch (layer.type) {
+            case 'line':
+                // Calculate line length
+                const dx = layer.endX - layer.x;
+                const dy = layer.endY - layer.y;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const lengthInMeters = this.convertPixelsToMeters(length);
+                const lengthInFields = lengthInMeters / 1.5;
+                measurementText = `l: ${lengthInMeters.toFixed(1)}m / f: ${lengthInFields.toFixed(1)}`;
+                
+                // Position text at the middle of the line
+                textX = (layer.x + layer.endX) / 2;
+                textY = (layer.y + layer.endY) / 2;
+                break;
+                
+            case 'circle':
+                // Calculate radius
+                const radius = layer.width / 2;
+                const radiusInMeters = this.convertPixelsToMeters(radius);
+                const diameterInMeters = radiusInMeters * 2;
+                measurementText = `r: ${radiusInMeters.toFixed(1)}m / d: ${diameterInMeters.toFixed(1)}m`;
+                
+                // Position text at the center of the circle
+                textX = layer.x;
+                textY = layer.y;
+                break;
+                
+            case 'rectangle':
+            case 'image':
+                // Calculate width and height
+                const widthInMeters = this.convertPixelsToMeters(layer.width);
+                const heightInMeters = this.convertPixelsToMeters(layer.height);
+                measurementText = `${widthInMeters.toFixed(1)}m × ${heightInMeters.toFixed(1)}m`;
+                
+                // Position text at the center of the rectangle/image
+                textX = layer.x + layer.width / 2;
+                textY = layer.y + layer.height / 2;
+                break;
+        }
+        
+        if (measurementText) {
+            // Draw text with outline for better visibility
+            this.ctx.strokeText(measurementText, textX, textY);
+            this.ctx.fillText(measurementText, textX, textY);
+        }
+        
+        this.ctx.restore();
+    }
+
+    convertPixelsToMeters(pixels) {
+        // If no grid is active, return pixels
+        if (this.battlegridType === 'none') {
+            return pixels;
+        }
+        
+        // Convert pixels to grid units, then to meters
+        const gridUnits = pixels / this.battlegridSize;
+        return gridUnits * this.battlegridScaleFactor;
     }
     
     drawFogOfWar(map) {
@@ -695,6 +778,7 @@ class BattlemapPlayer {
         this.battlegridOffsetX = battlegridState.offsetX || 0;
         this.battlegridOffsetY = battlegridState.offsetY || 0;
         this.battlegridColor = battlegridState.color || '#ffffff';
+        this.battlegridScaleFactor = battlegridState.scaleFactor || 1.5;
         
         console.log('Updated battlegrid properties:', {
             type: this.battlegridType,
@@ -703,7 +787,8 @@ class BattlemapPlayer {
             size: this.battlegridSize,
             offsetX: this.battlegridOffsetX,
             offsetY: this.battlegridOffsetY,
-            color: this.battlegridColor
+            color: this.battlegridColor,
+            scaleFactor: this.battlegridScaleFactor
         });
         
         // Re-render with new battlegrid
@@ -748,6 +833,7 @@ class BattlemapPlayer {
             this.battlegridOffsetX = map.battlegridState.offsetX || 0;
             this.battlegridOffsetY = map.battlegridState.offsetY || 0;
             this.battlegridColor = map.battlegridState.color || '#ffffff';
+            this.battlegridScaleFactor = map.battlegridState.scaleFactor || 1.5;
             
             console.log('Loaded battlegrid state for map:', mapId, map.battlegridState);
         } else {
@@ -759,6 +845,7 @@ class BattlemapPlayer {
             this.battlegridOffsetX = 0;
             this.battlegridOffsetY = 0;
             this.battlegridColor = '#ffffff';
+            this.battlegridScaleFactor = 1.5;
             
             console.log('No battlegrid state found for map:', mapId, 'using defaults');
         }

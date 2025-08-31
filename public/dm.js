@@ -95,6 +95,7 @@ class BattlemapDM {
         this.battlegridOffsetX = 0;
         this.battlegridOffsetY = 0;
         this.battlegridColor = '#ffffff';
+        this.battlegridScaleFactor = 1.5; // meters per grid unit
         
         // Initialize after DOM is ready
         if (document.readyState === 'loading') {
@@ -639,7 +640,7 @@ class BattlemapDM {
         this.socket.on('layer-updated', (data) => {
             const map = this.maps.get(data.mapId);
             if (map) {
-                const layerIndex = map.layers.findIndex(l => l.id === data.layerId);
+                const layerIndex = map.layers.findIndex(l => l.id === data.layer.id);
                 if (layerIndex !== -1) {
                     map.layers[layerIndex] = data.layer;
                     this.updateLayerList();
@@ -1337,6 +1338,13 @@ class BattlemapDM {
                     this.drawLayer(layer);
                 }
             });
+
+            // Draw measurements for layers that have showMeasurements enabled
+            map.layers.forEach(layer => {
+                if (layer.visible !== false && layer.showMeasurements) {
+                    this.drawLayerMeasurements(layer);
+                }
+            });
             
             // Draw fog of war (within the same transformation context)
             this.drawFogOfWar(map);
@@ -1496,6 +1504,81 @@ class BattlemapDM {
         }
         
         this.ctx.restore();
+    }
+
+    drawLayerMeasurements(layer) {
+        this.ctx.save();
+        
+        // Set text properties for measurements
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 2;
+        this.ctx.font = '14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        
+        let measurementText = '';
+        let textX = 0;
+        let textY = 0;
+        
+        switch (layer.type) {
+            case 'line':
+                // Calculate line length
+                const dx = layer.endX - layer.x;
+                const dy = layer.endY - layer.y;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const lengthInMeters = this.convertPixelsToMeters(length);
+                const lengthInFields = lengthInMeters / 1.5;
+                measurementText = `l: ${lengthInMeters.toFixed(1)}m / f: ${lengthInFields.toFixed(1)}`;
+                
+                // Position text at the middle of the line
+                textX = (layer.x + layer.endX) / 2;
+                textY = (layer.y + layer.endY) / 2;
+                break;
+                
+            case 'circle':
+                // Calculate radius
+                const radius = layer.width / 2;
+                const radiusInMeters = this.convertPixelsToMeters(radius);
+                const diameterInMeters = radiusInMeters * 2;
+                measurementText = `r: ${radiusInMeters.toFixed(1)}m / d: ${diameterInMeters.toFixed(1)}m`;
+                
+                // Position text at the center of the circle
+                textX = layer.x;
+                textY = layer.y;
+                break;
+                
+            case 'rectangle':
+            case 'image':
+                // Calculate width and height
+                const widthInMeters = this.convertPixelsToMeters(layer.width);
+                const heightInMeters = this.convertPixelsToMeters(layer.height);
+                measurementText = `${widthInMeters.toFixed(1)}m × ${heightInMeters.toFixed(1)}m`;
+                
+                // Position text at the center of the rectangle/image
+                textX = layer.x + layer.width / 2;
+                textY = layer.y + layer.height / 2;
+                break;
+        }
+        
+        if (measurementText) {
+            // Draw text with outline for better visibility
+            this.ctx.strokeText(measurementText, textX, textY);
+            this.ctx.fillText(measurementText, textX, textY);
+        }
+        
+        this.ctx.restore();
+    }
+
+    convertPixelsToMeters(pixels) {
+        // If no grid is active, return pixels
+        if (this.battlegridType === 'none') {
+            return pixels;
+        }
+        
+        // Convert pixels to grid units, then to meters
+        const gridUnits = pixels / this.battlegridSize;
+        return gridUnits * this.battlegridScaleFactor;
     }
     
     drawFogOfWar(map) {
@@ -2553,6 +2636,9 @@ class BattlemapDM {
                     <button class="layer-visibility" onclick="battlemapDM.toggleLayerVisibility('${layer.id}')">
                         <i class="fas fa-${layer.visible !== false ? 'eye' : 'eye-slash'}"></i>
                     </button>
+                    <button class="layer-measurements" onclick="battlemapDM.toggleLayerMeasurements('${layer.id}')" title="Toggle Measurements">
+                        <i class="fas fa-${layer.showMeasurements ? 'ruler' : 'ruler-combined'}"></i>
+                    </button>
                     <span>${layer.name || layer.type}</span>
                 </div>
                 <div class="layer-actions">
@@ -2710,6 +2796,29 @@ class BattlemapDM {
         const layer = map.layers.find(l => l.id === layerId);
         if (layer) {
             layer.visible = layer.visible === false ? true : false;
+            // Update the UI immediately
+            this.updateLayerList();
+            this.render();
+            
+            fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}/layers/${layerId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(layer)
+            });
+        }
+    }
+
+    toggleLayerMeasurements(layerId) {
+        const map = this.maps.get(this.viewingMapId);
+        if (!map) return;
+        
+        const layer = map.layers.find(l => l.id === layerId);
+        if (layer) {
+            layer.showMeasurements = !layer.showMeasurements;
+            // Update the UI immediately
+            this.updateLayerList();
+            this.render();
+            
             fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}/layers/${layerId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -3962,6 +4071,7 @@ class BattlemapDM {
         map.battlegridState.offsetX = this.battlegridOffsetX;
         map.battlegridState.offsetY = this.battlegridOffsetY;
         map.battlegridState.color = this.battlegridColor;
+        map.battlegridState.scaleFactor = this.battlegridScaleFactor;
         
         console.log('Saved battlegrid state for map:', this.viewingMapId, map.battlegridState);
         
@@ -3983,6 +4093,7 @@ class BattlemapDM {
             this.battlegridOffsetX = 0;
             this.battlegridOffsetY = 0;
             this.battlegridColor = '#ffffff';
+            this.battlegridScaleFactor = 1.5;
         } else {
             // Load saved state
             this.battlegridType = map.battlegridState.type || 'none';
@@ -3992,6 +4103,7 @@ class BattlemapDM {
             this.battlegridOffsetX = map.battlegridState.offsetX || 0;
             this.battlegridOffsetY = map.battlegridState.offsetY || 0;
             this.battlegridColor = map.battlegridState.color || '#ffffff';
+            this.battlegridScaleFactor = map.battlegridState.scaleFactor || 1.5;
         }
         
         // Update UI to reflect loaded state
@@ -4046,6 +4158,13 @@ class BattlemapDM {
         if (gridColorPicker) {
             gridColorPicker.value = this.battlegridColor;
         }
+
+        const gridScaleFactorSlider = document.getElementById('battlegridScaleFactor');
+        const gridScaleFactorValue = document.getElementById('battlegridScaleFactorValue');
+        if (gridScaleFactorSlider && gridScaleFactorValue) {
+            gridScaleFactorSlider.value = this.battlegridScaleFactor;
+            gridScaleFactorValue.textContent = this.battlegridScaleFactor;
+        }
     }
     
     emitBattlegridUpdate() {
@@ -4060,7 +4179,8 @@ class BattlemapDM {
                 size: this.battlegridSize,
                 offsetX: this.battlegridOffsetX,
                 offsetY: this.battlegridOffsetY,
-                color: this.battlegridColor
+                color: this.battlegridColor,
+                scaleFactor: this.battlegridScaleFactor
             }
         });
     }
@@ -4224,6 +4344,21 @@ class BattlemapDM {
         if (gridColorPicker) {
             gridColorPicker.addEventListener('input', (e) => {
                 this.battlegridColor = e.target.value;
+                this.saveBattlegridState();
+                this.render();
+                this.emitBattlegridUpdate();
+            });
+        }
+
+        // Scale factor slider
+        const gridScaleFactorSlider = document.getElementById('battlegridScaleFactor');
+        if (gridScaleFactorSlider) {
+            gridScaleFactorSlider.addEventListener('input', (e) => {
+                this.battlegridScaleFactor = parseFloat(e.target.value);
+                const gridScaleFactorValue = document.getElementById('battlegridScaleFactorValue');
+                if (gridScaleFactorValue) {
+                    gridScaleFactorValue.textContent = e.target.value;
+                }
                 this.saveBattlegridState();
                 this.render();
                 this.emitBattlegridUpdate();

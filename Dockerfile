@@ -4,6 +4,9 @@ FROM node:18-alpine
 # Set working directory
 WORKDIR /app
 
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
 # Copy package files
 COPY package*.json ./
 
@@ -12,6 +15,9 @@ RUN npm install --production
 
 # Copy application files
 COPY . .
+
+# Rebuild native dependencies for the target architecture
+RUN npm rebuild bcrypt --build-from-source
 
 # Replace BUILD_TIMESTAMP with actual build time
 RUN sed -i "s/BUILD_TIMESTAMP/$(date '+%Y-%m-%d %H:%M')/g" public/dm.html public/player.html
