@@ -39,6 +39,15 @@ class BattlemapPlayer {
         // Spell overlay state
         this.spellOverlayRotation = 0; // Current rotation in degrees
         
+        // Battlegrid state
+        this.battlegridType = 'none'; // 'none', 'grid', 'hex'
+        this.battlegridLineWidth = 2;
+        this.battlegridOpacity = 0.5;
+        this.battlegridSize = 50;
+        this.battlegridOffsetX = 0;
+        this.battlegridOffsetY = 0;
+        this.battlegridColor = '#ffffff';
+        
         // Initialize
         this.initializeCanvas();
         this.bindEvents();
@@ -270,6 +279,14 @@ class BattlemapPlayer {
                 this.rotateSpellOverlay();
             }
         });
+        
+        // Handle battlegrid updates from DM
+        this.socket.on('battlegrid-updated', (data) => {
+            if (data.adventureId === this.adventureId && data.mapId === this.activeMapId) {
+                console.log('Player received battlegrid-updated:', data);
+                this.updateBattlegridState(data.battlegridState);
+            }
+        });
     }
     
     handleMouseDown(e) {
@@ -293,6 +310,10 @@ class BattlemapPlayer {
     }
     
     render() {
+        if (!this.ctx) {
+            console.log('Canvas context is null in render method');
+            return;
+        }
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
         const map = this.maps.get(this.activeMapId);
@@ -316,6 +337,9 @@ class BattlemapPlayer {
             
             // Draw fog of war (after transformations so it moves with the map)
             this.drawFogOfWar(map);
+            
+            // Draw battlegrid (after transformations so it moves with the map)
+            this.drawBattlegrid(map);
             
             this.ctx.restore();
         }
@@ -460,6 +484,116 @@ class BattlemapPlayer {
         // Restore the canvas state
         this.ctx.restore();
     }
+    
+    drawBattlegrid(map) {
+        console.log('drawBattlegrid called with type:', this.battlegridType);
+        if (!this.ctx) {
+            console.log('Canvas context is null, returning');
+            return;
+        }
+        if (this.battlegridType === 'none') {
+            console.log('Battlegrid type is none, returning');
+            return;
+        }
+        
+        // Get background image dimensions for grid coverage
+        const bgImage = this.backgroundImages.get(map.backgroundImage);
+        if (!bgImage || !bgImage.complete) {
+            console.log('Background image not ready:', bgImage);
+            return;
+        }
+        
+        const imageWidth = bgImage.width;
+        const imageHeight = bgImage.height;
+        console.log('Drawing battlegrid with dimensions:', imageWidth, 'x', imageHeight);
+        console.log('Canvas dimensions:', this.canvas.width, 'x', this.canvas.height);
+        
+        // Save canvas state
+        this.ctx.save();
+        
+        // Set grid properties
+        console.log('Setting grid properties - color:', this.battlegridColor, 'lineWidth:', this.battlegridLineWidth, 'opacity:', this.battlegridOpacity);
+        this.ctx.strokeStyle = this.battlegridColor;
+        this.ctx.lineWidth = this.battlegridLineWidth;
+        this.ctx.globalAlpha = this.battlegridOpacity;
+        console.log('Canvas context after setting properties - strokeStyle:', this.ctx.strokeStyle, 'lineWidth:', this.ctx.lineWidth, 'globalAlpha:', this.ctx.globalAlpha);
+        
+        if (this.battlegridType === 'grid') {
+            this.drawGrid(imageWidth, imageHeight);
+        } else if (this.battlegridType === 'hex') {
+            this.drawHexGrid(imageWidth, imageHeight);
+        }
+        
+        // Restore canvas state
+        this.ctx.restore();
+    }
+    
+    drawGrid(imageWidth, imageHeight) {
+        const gridSize = this.battlegridSize;
+        const offsetX = this.battlegridOffsetX;
+        const offsetY = this.battlegridOffsetY;
+        
+        console.log('Drawing grid with size:', gridSize, 'offsetX:', offsetX, 'offsetY:', offsetY);
+        
+        // Draw vertical lines
+        for (let x = offsetX; x <= imageWidth + offsetX; x += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, imageHeight);
+            this.ctx.stroke();
+        }
+        
+        // Draw horizontal lines
+        for (let y = offsetY; y <= imageHeight + offsetY; y += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(imageWidth, y);
+            this.ctx.stroke();
+        }
+        
+        console.log('Grid drawing completed');
+    }
+    
+    drawHexGrid(imageWidth, imageHeight) {
+        const hexSize = this.battlegridSize;
+        const offsetX = this.battlegridOffsetX;
+        const offsetY = this.battlegridOffsetY;
+        
+        // Calculate hex dimensions
+        const hexWidth = hexSize * 2;
+        const hexHeight = hexSize * Math.sqrt(3);
+        const hexRadius = hexSize;
+        
+        // Calculate grid dimensions
+        const cols = Math.ceil(imageWidth / (hexWidth * 0.75)) + 2;
+        const rows = Math.ceil(imageHeight / hexHeight) + 2;
+        
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const x = offsetX + col * hexWidth * 0.75;
+                const y = offsetY + row * hexHeight + (col % 2) * hexHeight * 0.5;
+                
+                this.drawHexagon(x, y, hexRadius);
+            }
+        }
+    }
+    
+    drawHexagon(centerX, centerY, radius) {
+        this.ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            const x = centerX + radius * Math.cos(angle);
+            const y = centerY + radius * Math.sin(angle);
+            
+            if (i === 0) {
+                this.ctx.moveTo(x, y);
+            } else {
+                this.ctx.lineTo(x, y);
+            }
+        }
+        this.ctx.closePath();
+        this.ctx.stroke();
+    }
 
     updateFogSmoothly(newMap) {
         // Store the old fog image temporarily
@@ -540,6 +674,32 @@ class BattlemapPlayer {
         this.render();
     }
     
+    updateBattlegridState(battlegridState) {
+        console.log('Updating battlegrid state:', battlegridState);
+        
+        // Update battlegrid properties
+        this.battlegridType = battlegridState.type || 'none';
+        this.battlegridLineWidth = battlegridState.lineWidth || 2;
+        this.battlegridOpacity = battlegridState.opacity || 0.5;
+        this.battlegridSize = battlegridState.size || 50;
+        this.battlegridOffsetX = battlegridState.offsetX || 0;
+        this.battlegridOffsetY = battlegridState.offsetY || 0;
+        this.battlegridColor = battlegridState.color || '#ffffff';
+        
+        console.log('Updated battlegrid properties:', {
+            type: this.battlegridType,
+            lineWidth: this.battlegridLineWidth,
+            opacity: this.battlegridOpacity,
+            size: this.battlegridSize,
+            offsetX: this.battlegridOffsetX,
+            offsetY: this.battlegridOffsetY,
+            color: this.battlegridColor
+        });
+        
+        // Re-render with new battlegrid
+        this.render();
+    }
+    
     loadPlayerViewStateForMap(mapId) {
         const map = this.maps.get(mapId);
         if (!map) {
@@ -567,6 +727,30 @@ class BattlemapPlayer {
             this.playerNameFontSize = 14;
             
             console.log('No player view state found for map:', mapId, 'using defaults');
+        }
+        
+        // Load battlegrid state from map data
+        if (map.battlegridState) {
+            this.battlegridType = map.battlegridState.type || 'none';
+            this.battlegridLineWidth = map.battlegridState.lineWidth || 2;
+            this.battlegridOpacity = map.battlegridState.opacity || 0.5;
+            this.battlegridSize = map.battlegridState.size || 50;
+            this.battlegridOffsetX = map.battlegridState.offsetX || 0;
+            this.battlegridOffsetY = map.battlegridState.offsetY || 0;
+            this.battlegridColor = map.battlegridState.color || '#ffffff';
+            
+            console.log('Loaded battlegrid state for map:', mapId, map.battlegridState);
+        } else {
+            // Default values if no battlegrid state exists
+            this.battlegridType = 'none';
+            this.battlegridLineWidth = 2;
+            this.battlegridOpacity = 0.5;
+            this.battlegridSize = 50;
+            this.battlegridOffsetX = 0;
+            this.battlegridOffsetY = 0;
+            this.battlegridColor = '#ffffff';
+            
+            console.log('No battlegrid state found for map:', mapId, 'using defaults');
         }
         
         // Update player names overlay

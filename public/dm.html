@@ -72,6 +72,67 @@
                 </div>
             </div>
 
+            <!-- Battlegrid -->
+            <div class="sidebar-section">
+                <h3 class="section-header" data-section="battlegrid">
+                    <i class="fas fa-th-large"></i> Battlegrid
+                    <i class="fas fa-chevron-down section-toggle"></i>
+                </h3>
+                <div class="section-content" id="battlegrid-content">
+                    <div class="battlegrid-controls">
+                        <div class="view-controls">
+                            <label>Type:</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" id="battlegridTypeNone" name="battlegridType" value="none" checked>
+                                    <span class="radiomark"></span>
+                                    None
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" id="battlegridTypeGrid" name="battlegridType" value="grid">
+                                    <span class="radiomark"></span>
+                                    Grid
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" id="battlegridTypeHex" name="battlegridType" value="hex">
+                                    <span class="radiomark"></span>
+                                    Hex
+                                </label>
+                            </div>
+                        </div>
+                        <div class="view-controls">
+                            <label>Line Width:</label>
+                            <input type="range" id="battlegridLineWidth" min="1" max="10" value="2" step="1">
+                            <span id="battlegridLineWidthValue">2</span>
+                        </div>
+                        <div class="view-controls">
+                            <label>Line Opacity:</label>
+                            <input type="range" id="battlegridOpacity" min="0.1" max="1" value="0.5" step="0.01">
+                            <span id="battlegridOpacityValue">0.5</span>
+                        </div>
+                        <div class="view-controls">
+                            <label>Grid Size:</label>
+                            <input type="range" id="battlegridSize" min="10" max="200" value="50" step="1">
+                            <span id="battlegridSizeValue">50</span>
+                        </div>
+                        <div class="view-controls">
+                            <label>Offset X:</label>
+                            <input type="range" id="battlegridOffsetX" min="-200" max="200" value="0" step="1">
+                            <span id="battlegridOffsetXValue">0</span>
+                        </div>
+                                                  <div class="view-controls">
+                              <label>Offset Y:</label>
+                              <input type="range" id="battlegridOffsetY" min="-200" max="200" value="0" step="1">
+                              <span id="battlegridOffsetYValue">0</span>
+                          </div>
+                          <div class="view-controls">
+                              <label>Color:</label>
+                              <input type="color" id="battlegridColor" value="#ffffff">
+                          </div>
+                      </div>
+                </div>
+            </div>
+
             <!-- Drawing Tools -->
             <div class="sidebar-section">
                 <h3 class="section-header" data-section="drawing-tools">

@@ -1387,6 +1387,13 @@ canvas {
     padding: 6px 8px;
 }
 
+/* Battlegrid Controls */
+.battlegrid-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
 /* Adventure Selection Styles */
 .adventure-selection-container {
     min-height: 100vh;

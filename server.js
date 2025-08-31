@@ -744,6 +744,13 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('rotate-spell-overlay', data);
     });
     
+    // Forward battlegrid updates from DM to all clients
+    socket.on('battlegrid-updated', (data) => {
+        console.log('Forwarding battlegrid update:', data);
+        // Broadcast to all clients except the sender
+        socket.broadcast.emit('battlegrid-updated', data);
+    });
+    
     socket.on('disconnect', () => {
         console.log('Client disconnected');
     });

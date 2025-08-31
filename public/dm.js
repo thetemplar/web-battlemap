@@ -87,6 +87,15 @@ class BattlemapDM {
         this.players = new Map(); // Map of playerId -> playerData
         this.currentActivePlayerId = null;
         
+        // Battlegrid state
+        this.battlegridType = 'none'; // 'none', 'grid', 'hex'
+        this.battlegridLineWidth = 2;
+        this.battlegridOpacity = 0.5;
+        this.battlegridSize = 50;
+        this.battlegridOffsetX = 0;
+        this.battlegridOffsetY = 0;
+        this.battlegridColor = '#ffffff';
+        
         // Initialize after DOM is ready
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => this.initialize());
@@ -539,6 +548,9 @@ class BattlemapDM {
                 this.closeModals();
             }
         });
+        
+        // Battlegrid event handlers
+        this.setupBattlegridEvents();
     }
     
     setupSocketListeners() {
@@ -1208,6 +1220,9 @@ class BattlemapDM {
             // Draw fog of war (within the same transformation context)
             this.drawFogOfWar(map);
             
+            // Draw battlegrid (within the same transformation context)
+            this.drawBattlegrid(map);
+            
             // Draw temporary shape
             if (this.tempShape) {
                 this.drawLayer(this.tempShape);
@@ -1395,6 +1410,101 @@ class BattlemapDM {
         // Draw the fog image now (within the transformation context)
         console.log('Drawing fog image with proper transformations');
         this.drawFogImage();
+    }
+    
+    drawBattlegrid(map) {
+        if (this.battlegridType === 'none') {
+            return;
+        }
+        
+        // Get background image dimensions for grid coverage
+        const bgImage = this.backgroundImages.get(map.backgroundImage);
+        if (!bgImage || !bgImage.complete) {
+            return;
+        }
+        
+        const imageWidth = bgImage.width;
+        const imageHeight = bgImage.height;
+        
+        // Save canvas state
+        this.ctx.save();
+        
+        // Set grid properties
+        this.ctx.strokeStyle = this.battlegridColor;
+        this.ctx.lineWidth = this.battlegridLineWidth;
+        this.ctx.globalAlpha = this.battlegridOpacity;
+        
+        if (this.battlegridType === 'grid') {
+            this.drawGrid(imageWidth, imageHeight);
+        } else if (this.battlegridType === 'hex') {
+            this.drawHexGrid(imageWidth, imageHeight);
+        }
+        
+        // Restore canvas state
+        this.ctx.restore();
+    }
+    
+    drawGrid(imageWidth, imageHeight) {
+        const gridSize = this.battlegridSize;
+        const offsetX = this.battlegridOffsetX;
+        const offsetY = this.battlegridOffsetY;
+        
+        // Draw vertical lines
+        for (let x = offsetX; x <= imageWidth + offsetX; x += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, imageHeight);
+            this.ctx.stroke();
+        }
+        
+        // Draw horizontal lines
+        for (let y = offsetY; y <= imageHeight + offsetY; y += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(imageWidth, y);
+            this.ctx.stroke();
+        }
+    }
+    
+    drawHexGrid(imageWidth, imageHeight) {
+        const hexSize = this.battlegridSize;
+        const offsetX = this.battlegridOffsetX;
+        const offsetY = this.battlegridOffsetY;
+        
+        // Calculate hex dimensions
+        const hexWidth = hexSize * 2;
+        const hexHeight = hexSize * Math.sqrt(3);
+        const hexRadius = hexSize;
+        
+        // Calculate grid dimensions
+        const cols = Math.ceil(imageWidth / (hexWidth * 0.75)) + 2;
+        const rows = Math.ceil(imageHeight / hexHeight) + 2;
+        
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const x = offsetX + col * hexWidth * 0.75;
+                const y = offsetY + row * hexHeight + (col % 2) * hexHeight * 0.5;
+                
+                this.drawHexagon(x, y, hexRadius);
+            }
+        }
+    }
+    
+    drawHexagon(centerX, centerY, radius) {
+        this.ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            const x = centerX + radius * Math.cos(angle);
+            const y = centerY + radius * Math.sin(angle);
+            
+            if (i === 0) {
+                this.ctx.moveTo(x, y);
+            } else {
+                this.ctx.lineTo(x, y);
+            }
+        }
+        this.ctx.closePath();
+        this.ctx.stroke();
     }
     
     drawFogFromCanvas() {
@@ -1840,6 +1950,9 @@ class BattlemapDM {
             // Load player view state
             this.loadPlayerViewState();
             
+            // Load battlegrid state
+            this.loadBattlegridState();
+            
             // Update pan slider ranges after maps are loaded
             setTimeout(() => this.updatePanSliderRanges(), 100);
         })
@@ -1912,6 +2025,9 @@ class BattlemapDM {
         
         // Load player view state for the new map
         this.loadPlayerViewState();
+        
+        // Load battlegrid state for the new map
+        this.loadBattlegridState();
         
         this.render();
     }
@@ -3552,6 +3668,129 @@ class BattlemapDM {
         });
     }
     
+    saveBattlegridState() {
+        // Save battlegrid state for the current viewing map
+        if (!this.viewingMapId) return;
+        
+        const map = this.maps.get(this.viewingMapId);
+        if (!map) return;
+        
+        // Initialize battlegridState if it doesn't exist
+        if (!map.battlegridState) {
+            map.battlegridState = {};
+        }
+        
+        // Save current battlegrid state
+        map.battlegridState.type = this.battlegridType;
+        map.battlegridState.lineWidth = this.battlegridLineWidth;
+        map.battlegridState.opacity = this.battlegridOpacity;
+        map.battlegridState.size = this.battlegridSize;
+        map.battlegridState.offsetX = this.battlegridOffsetX;
+        map.battlegridState.offsetY = this.battlegridOffsetY;
+        map.battlegridState.color = this.battlegridColor;
+        
+        console.log('Saved battlegrid state for map:', this.viewingMapId, map.battlegridState);
+        
+        // Save the adventure data
+        this.saveAdventure();
+    }
+    
+    loadBattlegridState() {
+        // Load battlegrid state for the current viewing map
+        if (!this.viewingMapId) return;
+        
+        const map = this.maps.get(this.viewingMapId);
+        if (!map || !map.battlegridState) {
+            // Set default values if no state exists
+            this.battlegridType = 'none';
+            this.battlegridLineWidth = 2;
+            this.battlegridOpacity = 0.5;
+            this.battlegridSize = 50;
+            this.battlegridOffsetX = 0;
+            this.battlegridOffsetY = 0;
+            this.battlegridColor = '#ffffff';
+        } else {
+            // Load saved state
+            this.battlegridType = map.battlegridState.type || 'none';
+            this.battlegridLineWidth = map.battlegridState.lineWidth || 2;
+            this.battlegridOpacity = map.battlegridState.opacity || 0.5;
+            this.battlegridSize = map.battlegridState.size || 50;
+            this.battlegridOffsetX = map.battlegridState.offsetX || 0;
+            this.battlegridOffsetY = map.battlegridState.offsetY || 0;
+            this.battlegridColor = map.battlegridState.color || '#ffffff';
+        }
+        
+        // Update UI to reflect loaded state
+        this.updateBattlegridUI();
+    }
+    
+    updateBattlegridUI() {
+        // Update radio buttons
+        const radioButton = document.querySelector(`input[name="battlegridType"][value="${this.battlegridType}"]`);
+        if (radioButton) {
+            radioButton.checked = true;
+        }
+        
+        // Update sliders and their values
+        const gridLineWidthSlider = document.getElementById('battlegridLineWidth');
+        const gridLineWidthValue = document.getElementById('battlegridLineWidthValue');
+        if (gridLineWidthSlider && gridLineWidthValue) {
+            gridLineWidthSlider.value = this.battlegridLineWidth;
+            gridLineWidthValue.textContent = this.battlegridLineWidth;
+        }
+        
+        const gridOpacitySlider = document.getElementById('battlegridOpacity');
+        const gridOpacityValue = document.getElementById('battlegridOpacityValue');
+        if (gridOpacitySlider && gridOpacityValue) {
+            gridOpacitySlider.value = this.battlegridOpacity;
+            gridOpacityValue.textContent = this.battlegridOpacity;
+        }
+        
+        const gridSizeSlider = document.getElementById('battlegridSize');
+        const gridSizeValue = document.getElementById('battlegridSizeValue');
+        if (gridSizeSlider && gridSizeValue) {
+            gridSizeSlider.value = this.battlegridSize;
+            gridSizeValue.textContent = this.battlegridSize;
+        }
+        
+        const gridOffsetXSlider = document.getElementById('battlegridOffsetX');
+        const gridOffsetXValue = document.getElementById('battlegridOffsetXValue');
+        if (gridOffsetXSlider && gridOffsetXValue) {
+            gridOffsetXSlider.value = this.battlegridOffsetX;
+            gridOffsetXValue.textContent = this.battlegridOffsetX;
+        }
+        
+        const gridOffsetYSlider = document.getElementById('battlegridOffsetY');
+        const gridOffsetYValue = document.getElementById('battlegridOffsetYValue');
+        if (gridOffsetYSlider && gridOffsetYValue) {
+            gridOffsetYSlider.value = this.battlegridOffsetY;
+            gridOffsetYValue.textContent = this.battlegridOffsetY;
+        }
+        
+        // Update color picker
+        const gridColorPicker = document.getElementById('battlegridColor');
+        if (gridColorPicker) {
+            gridColorPicker.value = this.battlegridColor;
+        }
+    }
+    
+    emitBattlegridUpdate() {
+        // Emit battlegrid update to players
+        this.socket.emit('battlegrid-updated', {
+            adventureId: this.adventureId,
+            mapId: this.viewingMapId,
+            battlegridState: {
+                type: this.battlegridType,
+                lineWidth: this.battlegridLineWidth,
+                opacity: this.battlegridOpacity,
+                size: this.battlegridSize,
+                offsetX: this.battlegridOffsetX,
+                offsetY: this.battlegridOffsetY,
+                color: this.battlegridColor
+            }
+        });
+    }
+    
     setupCollapsibleSections() {
         // Add click handlers for section headers
         document.querySelectorAll('.section-header').forEach(header => {
@@ -3585,6 +3824,104 @@ class BattlemapDM {
         document.querySelectorAll('.section-header').forEach(header => {
             header.classList.add('collapsed');
         });
+    }
+    
+    setupBattlegridEvents() {
+        // Grid type radio buttons
+        document.querySelectorAll('input[name="battlegridType"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                this.battlegridType = e.target.value;
+                this.saveBattlegridState();
+                this.render();
+                this.emitBattlegridUpdate();
+            });
+        });
+        
+        // Line width slider
+        const gridLineWidthSlider = document.getElementById('battlegridLineWidth');
+        if (gridLineWidthSlider) {
+            gridLineWidthSlider.addEventListener('input', (e) => {
+                this.battlegridLineWidth = parseInt(e.target.value);
+                const gridLineWidthValue = document.getElementById('battlegridLineWidthValue');
+                if (gridLineWidthValue) {
+                    gridLineWidthValue.textContent = e.target.value;
+                }
+                this.saveBattlegridState();
+                this.render();
+                this.emitBattlegridUpdate();
+            });
+        }
+        
+        // Line opacity slider
+        const gridOpacitySlider = document.getElementById('battlegridOpacity');
+        if (gridOpacitySlider) {
+            gridOpacitySlider.addEventListener('input', (e) => {
+                this.battlegridOpacity = parseFloat(e.target.value);
+                const gridOpacityValue = document.getElementById('battlegridOpacityValue');
+                if (gridOpacityValue) {
+                    gridOpacityValue.textContent = e.target.value;
+                }
+                this.saveBattlegridState();
+                this.render();
+                this.emitBattlegridUpdate();
+            });
+        }
+        
+        // Grid size slider
+        const gridSizeSlider = document.getElementById('battlegridSize');
+        if (gridSizeSlider) {
+            gridSizeSlider.addEventListener('input', (e) => {
+                this.battlegridSize = parseInt(e.target.value);
+                const gridSizeValue = document.getElementById('battlegridSizeValue');
+                if (gridSizeValue) {
+                    gridSizeValue.textContent = e.target.value;
+                }
+                this.saveBattlegridState();
+                this.render();
+                this.emitBattlegridUpdate();
+            });
+        }
+        
+        // Offset X slider
+        const gridOffsetXSlider = document.getElementById('battlegridOffsetX');
+        if (gridOffsetXSlider) {
+            gridOffsetXSlider.addEventListener('input', (e) => {
+                this.battlegridOffsetX = parseInt(e.target.value);
+                const gridOffsetXValue = document.getElementById('battlegridOffsetXValue');
+                if (gridOffsetXValue) {
+                    gridOffsetXValue.textContent = e.target.value;
+                }
+                this.saveBattlegridState();
+                this.render();
+                this.emitBattlegridUpdate();
+            });
+        }
+        
+        // Offset Y slider
+        const gridOffsetYSlider = document.getElementById('battlegridOffsetY');
+        if (gridOffsetYSlider) {
+            gridOffsetYSlider.addEventListener('input', (e) => {
+                this.battlegridOffsetY = parseInt(e.target.value);
+                const gridOffsetYValue = document.getElementById('battlegridOffsetYValue');
+                if (gridOffsetYValue) {
+                    gridOffsetYValue.textContent = e.target.value;
+                }
+                this.saveBattlegridState();
+                this.render();
+                this.emitBattlegridUpdate();
+            });
+        }
+        
+        // Color picker
+        const gridColorPicker = document.getElementById('battlegridColor');
+        if (gridColorPicker) {
+            gridColorPicker.addEventListener('input', (e) => {
+                this.battlegridColor = e.target.value;
+                this.saveBattlegridState();
+                this.render();
+                this.emitBattlegridUpdate();
+            });
+        }
     }
     
     // SRD 5e Spell and Monster Search Methods
