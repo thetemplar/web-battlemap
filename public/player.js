@@ -73,13 +73,8 @@ class BattlemapPlayer {
                 this.maps.clear();
                 Object.values(maps).forEach(map => this.maps.set(map.id, map));
                 
-                // Set the first map as active if available
-                if (this.maps.size > 0) {
-                    this.activeMapId = Array.from(this.maps.keys())[0];
-                    
-                    // Load player view state for the active map
-                    this.loadPlayerViewStateForMap(this.activeMapId);
-                }
+                // Don't set active map here - it will be set by initial-state event
+                // The active map and player view state will be loaded from the server
                 
                 this.render();
             } else {
@@ -118,11 +113,28 @@ class BattlemapPlayer {
         this.socket.on('connect', () => {
             this.isConnected = true;
             this.hideLoadingScreen();
+            
+            // Request initial state from server
+            this.socket.emit('request-initial-state', {
+                adventureId: this.adventureId
+            });
         });
         
         this.socket.on('disconnect', () => {
             this.isConnected = false;
             this.showLoadingScreen();
+        });
+        
+        this.socket.on('initial-state', (data) => {
+            console.log('Player received initial-state:', data);
+            this.maps.clear();
+            data.maps.forEach(map => this.maps.set(map.id, map));
+            this.activeMapId = data.activeMapId;
+            
+            // Load player view state for the active map
+            this.loadPlayerViewStateForMap(this.activeMapId);
+            
+            this.render();
         });
         
         // Adventure-scoped map events

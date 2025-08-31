@@ -702,6 +702,24 @@ app.get('/adventure/:adventureId/player', (req, res) => {
 io.on('connection', (socket) => {
     console.log('Client connected');
     
+    // Send initial state to new connections
+    socket.on('request-initial-state', (data) => {
+        console.log('Client requesting initial state for adventure:', data.adventureId);
+        const adventure = loadAdventure(data.adventureId);
+        if (adventure) {
+            // Use stored activeMapId or first map if none specified
+            let activeMapId = adventure.activeMapId;
+            if (!activeMapId && adventure.maps && Object.keys(adventure.maps).length > 0) {
+                activeMapId = Object.keys(adventure.maps)[0];
+            }
+            
+            socket.emit('initial-state', {
+                maps: Object.values(adventure.maps || {}),
+                activeMapId: activeMapId
+            });
+        }
+    });
+    
     // Forward player view updates from DM to all clients
     socket.on('player-view-updated', (data) => {
         console.log('Forwarding player view update:', data);
@@ -712,6 +730,14 @@ io.on('connection', (socket) => {
     // Forward active map changes from DM to all clients
     socket.on('active-map-changed', (data) => {
         console.log('Forwarding active map change:', data);
+        
+        // Save the active map ID to the adventure data
+        const adventure = loadAdventure(data.adventureId);
+        if (adventure) {
+            adventure.activeMapId = data.activeMapId;
+            saveAdventure(adventure);
+        }
+        
         // Broadcast to all clients except the sender
         socket.broadcast.emit('active-map-changed', data);
     });

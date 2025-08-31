@@ -71,8 +71,8 @@
                         </div>
                         <div class="fog-brush-controls">
                             <label>Brush Size:</label>
-                            <input type="range" id="fogBrushSizeSlider" min="10" max="200" value="50">
                             <span id="fogBrushSizeValue">50px</span>
+                            <input type="range" id="fogBrushSizeSlider" min="10" max="200" value="50">
                         </div>
                     </div>
                 </div>
@@ -108,28 +108,28 @@
                         </div>
                         <div class="view-controls">
                             <label>Line Width:</label>
-                            <input type="range" id="battlegridLineWidth" min="1" max="10" value="2" step="1">
                             <span id="battlegridLineWidthValue">2</span>
+                            <input type="range" id="battlegridLineWidth" min="1" max="10" value="2" step="1">
                         </div>
                         <div class="view-controls">
                             <label>Line Opacity:</label>
-                            <input type="range" id="battlegridOpacity" min="0.1" max="1" value="0.5" step="0.01">
                             <span id="battlegridOpacityValue">0.5</span>
+                            <input type="range" id="battlegridOpacity" min="0.1" max="1" value="0.5" step="0.01">
                         </div>
                         <div class="view-controls">
                             <label>Grid Size:</label>
-                            <input type="range" id="battlegridSize" min="10" max="200" value="50" step="1">
                             <span id="battlegridSizeValue">50</span>
+                            <input type="range" id="battlegridSize" min="10" max="200" value="50" step="1">
                         </div>
-                        <div class="view-controls">
-                            <label>Offset X:</label>
-                            <input type="range" id="battlegridOffsetX" min="-200" max="200" value="0" step="1">
-                            <span id="battlegridOffsetXValue">0</span>
-                        </div>
+                                                                          <div class="view-controls">
+                              <label>Offset X:</label>
+                              <span id="battlegridOffsetXValue">0</span>
+                              <input type="range" id="battlegridOffsetX" min="-200" max="200" value="0" step="1">
+                          </div>
                                                   <div class="view-controls">
                               <label>Offset Y:</label>
-                              <input type="range" id="battlegridOffsetY" min="-200" max="200" value="0" step="1">
                               <span id="battlegridOffsetYValue">0</span>
+                              <input type="range" id="battlegridOffsetY" min="-200" max="200" value="0" step="1">
                           </div>
                           <div class="view-controls">
                               <label>Color:</label>
@@ -169,27 +169,26 @@
                             <label>Color:</label>
                             <input type="color" id="drawingColor" value="#ff0000">
                             <label>Opacity:</label>
-                            <input type="range" id="opacitySlider" min="0" max="100" value="100">
                             <span id="opacityValue">100%</span>
+                            <input type="range" id="opacitySlider" min="0" max="100" value="100">
                         </div>
                         
                         <div class="size-controls">
                             <label>Size:</label>
-                            <input type="range" id="sizeSlider" min="1" max="50" value="5">
                             <span id="sizeValue">5px</span>
+                            <input type="range" id="sizeSlider" min="1" max="50" value="5">
                         </div>
                     </div>
-                </div>
-            </div>
-            
-                         <!-- Layer Management -->
-             <div class="sidebar-section">
-                 <h3 class="section-header" data-section="layers">
-                     <i class="fas fa-layer-group"></i> Layers
-                     <i class="fas fa-chevron-down section-toggle"></i>
-                 </h3>
-                <div class="section-content" id="layers-content">
-                    <div id="layerList" class="layer-list"></div>
+                    
+                    <!-- Layer Management Subsection -->
+                    <div class="subsection-header" data-subsection="layers">
+                        <h4><i class="fas fa-layer-group"></i> Layers
+                            <i class="fas fa-chevron-down subsection-toggle"></i>
+                        </h4>
+                    </div>
+                    <div class="subsection-content" id="layers-content">
+                        <div id="layerList" class="layer-list"></div>
+                    </div>
                 </div>
             </div>
             
@@ -203,23 +202,23 @@
                     <div class="player-view-controls">
                         <div class="view-controls">
                             <label>Player Zoom:</label>
-                            <input type="range" id="playerZoomSlider" min="0.1" max="5" step="0.1" value="1">
                             <span id="playerZoomValue">100%</span>
+                            <input type="range" id="playerZoomSlider" min="0.1" max="5" step="0.1" value="1">
                         </div>
                         <div class="view-controls">
                             <label>Player Pan X (Center):</label>
-                            <input type="range" id="playerPanXSlider" min="0" max="2000" value="0">
                             <span id="playerPanXValue">0px</span>
+                            <input type="range" id="playerPanXSlider" min="0" max="2000" value="0">
                         </div>
                         <div class="view-controls">
                             <label>Player Pan Y (Center):</label>
-                            <input type="range" id="playerPanYSlider" min="0" max="2000" value="0">
                             <span id="playerPanYValue">0px</span>
+                            <input type="range" id="playerPanYSlider" min="0" max="2000" value="0">
                         </div>
                         <div class="view-controls">
                             <label>Player Name Font Size:</label>
-                            <input type="range" id="playerNameFontSizeSlider" min="6" max="60" value="14">
                             <span id="playerNameFontSizeValue">14px</span>
+                            <input type="range" id="playerNameFontSizeSlider" min="6" max="60" value="14">
                         </div>
                         <div class="view-buttons">
                             <button id="selectionBoxTool" class="tool-btn" data-tool="selection-box" title="View Box" style="width: 33%;">
@@ -255,23 +254,32 @@
                            <i class="fas fa-stop-circle"></i> End Combat
                        </button>
                    </div>
-                   <div class="add-player-form">
-                       <div class="form-group">
-                           <label for="playerName">Player Name:</label>
-                           <input type="text" id="playerName" placeholder="Enter player name">
+                   
+                   <!-- Add Player Subsection -->
+                   <div class="subsection-header" data-subsection="add-player">
+                       <h4><i class="fas fa-user-plus"></i> Add Player
+                           <i class="fas fa-chevron-down subsection-toggle"></i>
+                       </h4>
+                   </div>
+                   <div class="subsection-content" id="add-player-content">
+                       <div class="add-player-form">
+                           <div class="form-group">
+                               <label for="playerName">Player Name:</label>
+                               <input type="text" id="playerName" placeholder="Enter player name">
+                           </div>
+                                                       <div class="form-group">
+                                <label for="playerOrientation">Orientation (degrees):</label>
+                                <span id="playerOrientationValue">0°</span>
+                                <input type="range" id="playerOrientation" min="0" max="360" value="0">
+                            </div>
+                           <div class="form-group">
+                               <label for="playerInitiative">Initiative:</label>
+                               <input type="number" id="playerInitiative" min="0" max="99" placeholder="0-99">
+                           </div>
+                           <button id="addPlayerBtn" class="btn btn-primary">
+                               <i class="fas fa-plus"></i> Add Player
+                           </button>
                        </div>
-                       <div class="form-group">
-                           <label for="playerOrientation">Orientation (degrees):</label>
-                           <input type="range" id="playerOrientation" min="0" max="360" value="0">
-                           <span id="playerOrientationValue">0°</span>
-                       </div>
-                       <div class="form-group">
-                           <label for="playerInitiative">Initiative:</label>
-                           <input type="number" id="playerInitiative" min="0" max="99" placeholder="0-99">
-                       </div>
-                       <button id="addPlayerBtn" class="btn btn-primary">
-                           <i class="fas fa-plus"></i> Add Player
-                       </button>
                    </div>
                 </div>
             </div>

@@ -579,6 +579,13 @@ class BattlemapDM {
             this.render();
         });
         
+        // Request initial state when connecting
+        this.socket.on('connect', () => {
+            this.socket.emit('request-initial-state', {
+                adventureId: this.adventureId
+            });
+        });
+        
         this.socket.on('map-updated', (data) => {
             console.log('DM received map-updated:', data);
             
@@ -1071,7 +1078,7 @@ class BattlemapDM {
         // Emit player view update
         this.socket.emit('player-view-updated', {
             adventureId: this.adventureId,
-            mapId: this.viewingMapId,
+            mapId: this.activeMapId,
             zoom: this.currentPlayerZoom,
             pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY },
             fontSize: this.currentPlayerNameFontSize
@@ -2263,7 +2270,7 @@ class BattlemapDM {
         this.updateLayerList();
         this.updatePanSliderRanges(); // Update pan ranges for new map
         
-        // Load player view state for the new map
+        // Load player view state for the active map (not the viewing map)
         this.loadPlayerViewState();
         
         // Load battlegrid state for the new map
@@ -2320,6 +2327,31 @@ class BattlemapDM {
     
     setActiveMap(mapId) {
         console.log('setActiveMap called with:', mapId);
+        
+        // Save current player view state for the new active map
+        const newActiveMap = this.maps.get(mapId);
+        if (newActiveMap) {
+            // Initialize playerViewState if it doesn't exist
+            if (!newActiveMap.playerViewState) {
+                newActiveMap.playerViewState = {};
+            }
+            
+            // Save current player view state to the new active map
+            newActiveMap.playerViewState.zoom = this.currentPlayerZoom;
+            newActiveMap.playerViewState.panX = this.currentPlayerPanX;
+            newActiveMap.playerViewState.panY = this.currentPlayerPanY;
+            newActiveMap.playerViewState.fontSize = this.currentPlayerNameFontSize;
+            
+            console.log('Saved player view state for new active map:', mapId, {
+                zoom: this.currentPlayerZoom,
+                panX: this.currentPlayerPanX,
+                panY: this.currentPlayerPanY,
+                fontSize: this.currentPlayerNameFontSize
+            });
+            
+            // Save the adventure data
+            this.saveAdventure();
+        }
         
         // Update local state immediately
         this.activeMapId = mapId;
@@ -3553,7 +3585,7 @@ class BattlemapDM {
         // Emit player view update to all connected clients
         this.socket.emit('player-view-updated', {
             adventureId: this.adventureId,
-            mapId: this.viewingMapId,
+            mapId: this.activeMapId,
             zoom: this.currentPlayerZoom,
             pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY },
             fontSize: this.currentPlayerNameFontSize
@@ -3574,7 +3606,7 @@ class BattlemapDM {
         // Emit font size update to all connected clients
         this.socket.emit('player-view-updated', {
             adventureId: this.adventureId,
-            mapId: this.viewingMapId,
+            mapId: this.activeMapId,
             zoom: this.currentPlayerZoom,
             pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY },
             fontSize: this.currentPlayerNameFontSize
@@ -3585,7 +3617,7 @@ class BattlemapDM {
     
     resetPlayerView() {
         // Get current map and background image for coordinate calculation
-        const map = this.maps.get(this.viewingMapId);
+        const map = this.maps.get(this.activeMapId);
         if (!map || !map.backgroundImage) {
             console.log('No map or background image for reset');
             return;
@@ -3648,7 +3680,7 @@ class BattlemapDM {
         // Emit player view update
         this.socket.emit('player-view-updated', {
             adventureId: this.adventureId,
-            mapId: this.viewingMapId,
+            mapId: this.activeMapId,
             zoom: this.currentPlayerZoom,
             pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY },
             fontSize: this.currentPlayerNameFontSize
@@ -3662,7 +3694,7 @@ class BattlemapDM {
     
     syncPlayerViewToDM() {
         // Get current map and background image for coordinate conversion
-        const map = this.maps.get(this.viewingMapId);
+        const map = this.maps.get(this.activeMapId);
         if (!map || !map.backgroundImage) {
             console.log('No map or background image for sync');
             return;
@@ -3816,8 +3848,8 @@ class BattlemapDM {
     }
     
     loadPlayerViewState() {
-        // Load player view state for the current viewing map
-        if (!this.viewingMapId) {
+        // Load player view state for the current active map (not viewing map)
+        if (!this.activeMapId) {
             this.currentPlayerZoom = 1;
             this.currentPlayerPanX = 0;
             this.currentPlayerPanY = 0;
@@ -3825,7 +3857,7 @@ class BattlemapDM {
             return;
         }
         
-        const map = this.maps.get(this.viewingMapId);
+        const map = this.maps.get(this.activeMapId);
         if (!map) {
             this.currentPlayerZoom = 1;
             this.currentPlayerPanX = 0;
@@ -3840,7 +3872,7 @@ class BattlemapDM {
         this.currentPlayerPanY = map.playerViewState?.panY || 0;
         this.currentPlayerNameFontSize = map.playerViewState?.fontSize || 14;
         
-        console.log('Loaded player view state for map:', this.viewingMapId, {
+        console.log('Loaded player view state for active map:', this.activeMapId, {
             zoom: this.currentPlayerZoom,
             panX: this.currentPlayerPanX,
             panY: this.currentPlayerPanY,
@@ -3851,10 +3883,10 @@ class BattlemapDM {
     }
     
     savePlayerViewState() {
-        // Save player view state for the current viewing map
-        if (!this.viewingMapId) return;
+        // Save player view state for the current active map (not viewing map)
+        if (!this.activeMapId) return;
         
-        const map = this.maps.get(this.viewingMapId);
+        const map = this.maps.get(this.activeMapId);
         if (!map) return;
         
         // Initialize playerViewState if it doesn't exist
@@ -3868,7 +3900,7 @@ class BattlemapDM {
         map.playerViewState.panY = this.currentPlayerPanY;
         map.playerViewState.fontSize = this.currentPlayerNameFontSize;
         
-        console.log('Saved player view state for map:', this.viewingMapId, {
+        console.log('Saved player view state for active map:', this.activeMapId, {
             zoom: this.currentPlayerZoom,
             panX: this.currentPlayerPanX,
             panY: this.currentPlayerPanY,
@@ -4059,12 +4091,45 @@ class BattlemapDM {
             });
         });
         
+        // Add click handlers for subsection headers
+        document.querySelectorAll('.subsection-header').forEach(header => {
+            header.addEventListener('click', (e) => {
+                // Don't trigger if clicking on buttons inside the header
+                if (e.target.closest('button')) return;
+                
+                const subsectionId = header.dataset.subsection;
+                const content = document.getElementById(`${subsectionId}-content`);
+                
+                if (content) {
+                    const isCollapsed = content.classList.contains('collapsed');
+                    
+                    if (isCollapsed) {
+                        // Expand
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    } else {
+                        // Collapse
+                        content.classList.add('collapsed');
+                        header.classList.add('collapsed');
+                    }
+                }
+            });
+        });
+        
         // Initialize all sections as collapsed by default
         document.querySelectorAll('.section-content').forEach(content => {
             content.classList.add('collapsed');
         });
         document.querySelectorAll('.section-header').forEach(header => {
             header.classList.add('collapsed');
+        });
+        
+        // Initialize all subsections as expanded by default (so Add Player is visible)
+        document.querySelectorAll('.subsection-content').forEach(content => {
+            content.classList.remove('collapsed');
+        });
+        document.querySelectorAll('.subsection-header').forEach(header => {
+            header.classList.remove('collapsed');
         });
     }
     
