@@ -737,12 +737,7 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('hide-spell-from-player', data);
     });
     
-    // Forward spell overlay rotation to players
-    socket.on('rotate-spell-overlay', (data) => {
-        console.log('Rotating spell overlay');
-        // Broadcast to all clients except the sender
-        socket.broadcast.emit('rotate-spell-overlay', data);
-    });
+
     
     // Forward battlegrid updates from DM to all clients
     socket.on('battlegrid-updated', (data) => {

@@ -373,6 +373,22 @@ class BattlemapDM {
             });
         }
         
+        const fogSelectionBoxBtn = document.getElementById('fogSelectionBoxBtn');
+        if (fogSelectionBoxBtn) {
+            fogSelectionBoxBtn.addEventListener('click', () => {
+                this.currentFogTool = 'fog-selection-box';
+                this.updateFogButtonStates();
+            });
+        }
+        
+        const revealSelectionBoxBtn = document.getElementById('revealSelectionBoxBtn');
+        if (revealSelectionBoxBtn) {
+            revealSelectionBoxBtn.addEventListener('click', () => {
+                this.currentFogTool = 'reveal-selection-box';
+                this.updateFogButtonStates();
+            });
+        }
+        
         // Fog brush size slider
         const fogBrushSizeSlider = document.getElementById('fogBrushSizeSlider');
         if (fogBrushSizeSlider) {
@@ -708,6 +724,15 @@ class BattlemapDM {
             this.isFogDrawing = true;
             this.fogDrawPath = [{ x, y }];
             this.render();
+        } else if (this.currentFogTool === 'fog-selection-box' || this.currentFogTool === 'reveal-selection-box') {
+            console.log('Starting fog selection box drawing with tool:', this.currentFogTool);
+            
+            // Ensure fog canvas is properly sized before drawing
+            this.ensureFogCanvasSize();
+            
+            this.isDrawing = true;
+            this.tempShape = this.createFogSelectionBox(x, y);
+            document.getElementById('statusText').textContent = 'Drawing fog selection box...';
         } else if (this.currentTool === 'select') {
             this.handleSelectMouseDown(x, y);
         } else if (this.currentTool === 'selection-box') {
@@ -911,6 +936,17 @@ class BattlemapDM {
         };
     }
     
+    createFogSelectionBox(x, y) {
+        return {
+            type: this.currentFogTool,
+            x,
+            y,
+            width: 0,
+            height: 0,
+            fogTool: this.currentFogTool
+        };
+    }
+    
     updateTempShape(x, y) {
         if (!this.tempShape) return;
         
@@ -929,6 +965,14 @@ class BattlemapDM {
         // Handle selection box differently - update player view instead of creating layer
         if (this.tempShape.type === 'selection-box') {
             this.handleSelectionBoxFinalized();
+            this.tempShape = null;
+            this.render(); // Re-render to remove the selection box from the canvas
+            return;
+        }
+        
+        // Handle fog selection box - apply fog to the selected area
+        if (this.tempShape.type === 'fog-selection-box' || this.tempShape.type === 'reveal-selection-box') {
+            this.handleFogSelectionBoxFinalized();
             this.tempShape = null;
             this.render(); // Re-render to remove the selection box from the canvas
             return;
@@ -1036,6 +1080,76 @@ class BattlemapDM {
         console.log('Player view updated from selection box:', {
             zoom: this.currentPlayerZoom,
             pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
+        });
+    }
+    
+    handleFogSelectionBoxFinalized() {
+        if (!this.tempShape || !this.viewingMapId) return;
+        
+        console.log('=== FOG SELECTION BOX FINALIZED ===');
+        console.log('Fog tool:', this.tempShape.fogTool);
+        console.log('Selection box:', this.tempShape.x, this.tempShape.y, this.tempShape.width, 'x', this.tempShape.height);
+        
+        // Get current map
+        const map = this.maps.get(this.viewingMapId);
+        if (!map) {
+            console.log('No map found for fog selection box');
+            return;
+        }
+        
+        // Ensure fog canvas is properly sized
+        this.ensureFogCanvasSize();
+        
+        // Calculate the selection box bounds in image coordinates
+        const selectionX = Math.min(this.tempShape.x, this.tempShape.x + this.tempShape.width);
+        const selectionY = Math.min(this.tempShape.y, this.tempShape.y + this.tempShape.height);
+        const selectionWidth = Math.abs(this.tempShape.width);
+        const selectionHeight = Math.abs(this.tempShape.height);
+        
+        // Don't apply fog to areas that are too small
+        if (selectionWidth < 5 || selectionHeight < 5) {
+            console.log('Selection box too small, ignoring');
+            return;
+        }
+        
+        // Apply fog to the selected area
+        if (this.tempShape.fogTool === 'fog-selection-box') {
+            // Add fog (black) to the selected area
+            this.fogCtx.fillStyle = 'black';
+            this.fogCtx.fillRect(selectionX, selectionY, selectionWidth, selectionHeight);
+            console.log('Added fog to selection box area');
+        } else if (this.tempShape.fogTool === 'reveal-selection-box') {
+            // Remove fog (clear) from the selected area
+            this.fogCtx.globalCompositeOperation = 'destination-out';
+            this.fogCtx.fillStyle = 'white';
+            this.fogCtx.fillRect(selectionX, selectionY, selectionWidth, selectionHeight);
+            this.fogCtx.globalCompositeOperation = 'source-over';
+            console.log('Removed fog from selection box area');
+        }
+        
+        // Update local map data immediately
+        const currentMap = this.maps.get(this.viewingMapId);
+        if (currentMap) {
+            currentMap.fogDataUrl = this.fogCanvas.toDataURL('image/png', 0.8);
+            console.log('Updated local map fogDataUrl after selection box fog');
+            
+            // Update fog cache directly from fog canvas to prevent flickering
+            this.updateFogCacheFromCanvas();
+        }
+        
+        // Re-render immediately
+        this.render();
+        
+        // Save fog state
+        this.saveFogState();
+        
+        // Update status
+        const action = this.tempShape.fogTool === 'fog-selection-box' ? 'added' : 'removed';
+        document.getElementById('statusText').textContent = `Fog ${action} from selection box area`;
+        
+        console.log('Fog selection box finalized:', {
+            tool: this.tempShape.fogTool,
+            area: { x: selectionX, y: selectionY, width: selectionWidth, height: selectionHeight }
         });
     }
     
@@ -1260,8 +1374,7 @@ class BattlemapDM {
     }
     
     drawBackgroundImage(img, map) {
-        // Always use original size and position for background
-        // Let the canvas transformation (zoom/pan) handle the scaling
+        // Draw the image normally
         this.ctx.drawImage(img, 0, 0, img.width, img.height);
     }
     
@@ -1276,6 +1389,26 @@ class BattlemapDM {
                 break;
             case 'selection-box':
                 // Draw selection box with dashed border and semi-transparent fill
+                this.ctx.strokeStyle = '#00ff00';
+                this.ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+                this.ctx.lineWidth = 3;
+                this.ctx.setLineDash([10, 5]);
+                this.ctx.fillRect(layer.x, layer.y, layer.width, layer.height);
+                this.ctx.strokeRect(layer.x, layer.y, layer.width, layer.height);
+                this.ctx.setLineDash([]); // Reset line dash
+                break;
+            case 'fog-selection-box':
+                // Draw fog selection box with red dashed border and semi-transparent red fill
+                this.ctx.strokeStyle = '#ff0000';
+                this.ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+                this.ctx.lineWidth = 3;
+                this.ctx.setLineDash([10, 5]);
+                this.ctx.fillRect(layer.x, layer.y, layer.width, layer.height);
+                this.ctx.strokeRect(layer.x, layer.y, layer.width, layer.height);
+                this.ctx.setLineDash([]); // Reset line dash
+                break;
+            case 'reveal-selection-box':
+                // Draw reveal selection box with green dashed border and semi-transparent green fill
                 this.ctx.strokeStyle = '#00ff00';
                 this.ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
                 this.ctx.lineWidth = 3;
@@ -1603,8 +1736,9 @@ class BattlemapDM {
         document.getElementById('mapDescription').value = '';
         document.getElementById('mapBackground').value = '';
         document.getElementById('saveMapPermanent').checked = false;
-        // Reset radio button selection to "none"
+        // Reset radio button selections to defaults
         document.querySelector('input[name="imageScaling"][value="none"]').checked = true;
+        document.querySelector('input[name="imageRotation"][value="0"]').checked = true;
         document.getElementById('mapSearchResults').innerHTML = '';
         this.selectedMapFromSearch = null;
     }
@@ -1615,6 +1749,7 @@ class BattlemapDM {
         const backgroundFile = document.getElementById('mapBackground').files[0];
         const savePermanent = document.getElementById('saveMapPermanent').checked;
         const scalingOption = document.querySelector('input[name="imageScaling"]:checked').value;
+        const rotationOption = parseInt(document.querySelector('input[name="imageRotation"]:checked').value);
         
         // If a map is selected from search, use it
         if (this.selectedMapFromSearch) {
@@ -1624,21 +1759,52 @@ class BattlemapDM {
         
         // Otherwise, handle file upload
         if (backgroundFile) {
-            if (scalingOption === 'none') {
-                // Upload without scaling
-                this.uploadMapImage(backgroundFile, name, description, savePermanent).then(data => {
-                    this.createMapWithBackground(name, data.imageUrl);
+            let processedFile = backgroundFile;
+            
+            // First apply rotation if needed
+            if (rotationOption !== 0) {
+                this.rotateImage(processedFile, rotationOption).then(rotatedFile => {
+                    processedFile = rotatedFile;
+                    
+                    // Then apply scaling if needed
+                    if (scalingOption === 'none') {
+                        // Upload without scaling
+                        this.uploadMapImage(processedFile, name, description, savePermanent).then(data => {
+                            this.createMapWithBackground(name, data.imageUrl);
+                        });
+                    } else {
+                        // Scale the image before uploading
+                        this.scaleImage(processedFile, scalingOption).then(scaledFile => {
+                            this.uploadMapImage(scaledFile, name, description, savePermanent).then(data => {
+                                this.createMapWithBackground(name, data.imageUrl);
+                            });
+                        }).catch(error => {
+                            console.error('Image scaling error:', error);
+                            alert('Failed to scale image: ' + error.message);
+                        });
+                    }
+                }).catch(error => {
+                    console.error('Image rotation error:', error);
+                    alert('Failed to rotate image: ' + error.message);
                 });
             } else {
-                // Scale the image before uploading
-                this.scaleImage(backgroundFile, scalingOption).then(scaledFile => {
-                    this.uploadMapImage(scaledFile, name, description, savePermanent).then(data => {
+                // No rotation needed, just handle scaling
+                if (scalingOption === 'none') {
+                    // Upload without scaling
+                    this.uploadMapImage(processedFile, name, description, savePermanent).then(data => {
                         this.createMapWithBackground(name, data.imageUrl);
                     });
-                }).catch(error => {
-                    console.error('Image scaling error:', error);
-                    alert('Failed to scale image: ' + error.message);
-                });
+                } else {
+                    // Scale the image before uploading
+                    this.scaleImage(processedFile, scalingOption).then(scaledFile => {
+                        this.uploadMapImage(scaledFile, name, description, savePermanent).then(data => {
+                            this.createMapWithBackground(name, data.imageUrl);
+                        });
+                    }).catch(error => {
+                        console.error('Image scaling error:', error);
+                        alert('Failed to scale image: ' + error.message);
+                    });
+                }
             }
         } else {
             this.createMapWithBackground(name, '');
@@ -1837,6 +2003,79 @@ class BattlemapDM {
         });
     }
     
+    rotateImage(file, rotationDegrees) {
+        return new Promise((resolve, reject) => {
+            if (rotationDegrees === 0) {
+                // No rotation needed, return original file
+                resolve(file);
+                return;
+            }
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = () => {
+                const originalWidth = img.naturalWidth;
+                const originalHeight = img.naturalHeight;
+                
+                console.log(`Original image dimensions: ${originalWidth}x${originalHeight}, rotating by ${rotationDegrees}°`);
+                
+                // Calculate new dimensions after rotation
+                let newWidth, newHeight;
+                if (rotationDegrees === 90 || rotationDegrees === 270) {
+                    newWidth = originalHeight;
+                    newHeight = originalWidth;
+                } else {
+                    newWidth = originalWidth;
+                    newHeight = originalHeight;
+                }
+                
+                // Set canvas size to accommodate the rotated image
+                canvas.width = newWidth;
+                canvas.height = newHeight;
+                
+                // Move to center of canvas
+                ctx.translate(newWidth / 2, newHeight / 2);
+                
+                // Rotate by the specified degrees
+                ctx.rotate((rotationDegrees * Math.PI) / 180);
+                
+                // Draw the image centered
+                ctx.drawImage(img, -originalWidth / 2, -originalHeight / 2, originalWidth, originalHeight);
+                
+                // Convert canvas to blob
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        // Create a new File object with the rotated image
+                        const rotatedFile = new File([blob], file.name, {
+                            type: file.type,
+                            lastModified: Date.now()
+                        });
+                        console.log(`Successfully created rotated image: ${rotatedFile.name} (${blob.size} bytes)`);
+                        resolve(rotatedFile);
+                    } else {
+                        reject(new Error('Failed to create rotated image'));
+                    }
+                }, file.type, 0.9); // Use 0.9 quality for good balance
+            };
+            
+            img.onerror = () => {
+                reject(new Error('Failed to load image for rotation'));
+            };
+            
+            // Load the image from the file
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                img.src = e.target.result;
+            };
+            reader.onerror = () => {
+                reject(new Error('Failed to read image file'));
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+    
     selectMapFromSearch(map) {
         this.selectedMapFromSearch = map;
         
@@ -1985,6 +2224,7 @@ class BattlemapDM {
                     <button onclick="battlemapDM.exportMap('${map.id}')" title="Export">
                         <i class="fas fa-upload"></i>
                     </button>
+
                     <button onclick="battlemapDM.renameMap('${map.id}')" title="Rename">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -2168,6 +2408,8 @@ class BattlemapDM {
         
         console.log('Map exported:', map.name);
     }
+    
+
     
     importMap() {
         // Create file input
@@ -2995,9 +3237,9 @@ class BattlemapDM {
         }
         
         // Update cursor
-        if (tool === 'fog-brush' || tool === 'reveal-brush') {
+        if (tool === 'fog-brush' || tool === 'reveal-brush' || tool === 'fog-selection-box' || tool === 'reveal-selection-box') {
             this.canvas.style.cursor = 'crosshair';
-            console.log('Set cursor to crosshair for brush tool');
+            console.log('Set cursor to crosshair for brush/selection box tool');
         } else {
             this.canvas.style.cursor = 'default';
             console.log('Set cursor to default');
@@ -4068,22 +4310,10 @@ class BattlemapDM {
         
         console.log('Showing spell to player:', this.currentSpell.name);
         
-        // Change button text to "Rotate 90°"
-        const showSpellBtn = document.getElementById('showSpellToPlayerBtn');
-        if (showSpellBtn) {
-            showSpellBtn.innerHTML = '<i class="fas fa-redo"></i> Rotate 90°';
-            showSpellBtn.onclick = () => this.rotateSpellOverlay();
-        }
+
     }
     
-    rotateSpellOverlay() {
-        // Send rotate command to players via Socket.IO
-        this.socket.emit('rotate-spell-overlay', {
-            adventureId: this.adventureId
-        });
-        
-        console.log('Rotating spell overlay');
-    }
+
     
     hideSpellFromPlayer() {
         // Send hide spell signal to players via Socket.IO
@@ -4380,6 +4610,10 @@ class BattlemapDM {
         } else if (this.currentFogTool === 'reveal-brush') {
             document.getElementById('revealBrushBtnOverlay')?.classList.add('active');
             document.getElementById('revealBrushBtn')?.classList.add('active');
+        } else if (this.currentFogTool === 'fog-selection-box') {
+            document.getElementById('fogSelectionBoxBtn')?.classList.add('active');
+        } else if (this.currentFogTool === 'reveal-selection-box') {
+            document.getElementById('revealSelectionBoxBtn')?.classList.add('active');
         }
     }
 }

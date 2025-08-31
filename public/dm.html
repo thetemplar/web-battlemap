@@ -62,6 +62,12 @@
                             <button id="revealBrushBtn" class="tool-btn" data-tool="reveal-brush" title="Reveal Brush">
                                 <i class="fas fa-eraser"></i>
                             </button>
+                            <button id="fogSelectionBoxBtn" class="tool-btn" data-tool="fog-selection-box" title="Fog Selection Box">
+                                <i class="fas fa-square"></i>
+                            </button>
+                            <button id="revealSelectionBoxBtn" class="tool-btn" data-tool="reveal-selection-box" title="Reveal Selection Box">
+                                <i class="fas fa-crop"></i>
+                            </button>
                         </div>
                         <div class="fog-brush-controls">
                             <label>Brush Size:</label>
@@ -145,9 +151,6 @@
                             <button id="selectTool" class="tool-btn active" data-tool="select">
                                 <i class="fas fa-mouse-pointer"></i>
                             </button>
-                            <button id="selectionBoxTool" class="tool-btn" data-tool="selection-box" title="Player View Selection Box">
-                                <i class="fas fa-crop"></i>
-                            </button>
                             <button id="rectangleTool" class="tool-btn" data-tool="rectangle">
                                 <i class="fas fa-square"></i>
                             </button>
@@ -219,10 +222,13 @@
                             <span id="playerNameFontSizeValue">14px</span>
                         </div>
                         <div class="view-buttons">
-                            <button id="resetPlayerViewBtn" class="btn btn-secondary">
+                            <button id="selectionBoxTool" class="tool-btn" data-tool="selection-box" title="View Box" style="width: 33%;">
+                                <i class="fas fa-crop"></i> View Box
+                            </button>
+                            <button id="resetPlayerViewBtn" class="btn btn-secondary" style="width: 33%;">
                                 <i class="fas fa-home"></i> Reset View
                             </button>
-                            <button id="syncPlayerViewBtn" class="btn btn-primary">
+                            <button id="syncPlayerViewBtn" class="btn btn-primary" style="width: 33%;">
                                 <i class="fas fa-sync"></i> Sync to DM View
                             </button>
                         </div>
@@ -311,6 +317,12 @@
                         <button id="revealBrushBtnOverlay" class="fog-btn" title="Reveal Brush">
                             <i class="fas fa-eraser"></i>
                         </button>
+                        <button id="fogSelectionBoxBtnOverlay" class="fog-btn" title="Fog Selection Box">
+                            <i class="fas fa-square"></i>
+                        </button>
+                        <button id="revealSelectionBoxBtnOverlay" class="fog-btn" title="Reveal Selection Box">
+                            <i class="fas fa-crop"></i>
+                        </button>
                         <button id="showEverythingBtnOverlay" class="fog-btn" title="Show Everything">
                             <i class="fas fa-eye"></i>
                         </button>
@@ -367,6 +379,34 @@
                     <div class="form-group">
                         <label for="mapBackground">Background Image:</label>
                         <input type="file" id="mapBackground" accept="image/*">
+                    </div>
+                    <div class="form-group">
+                        <label>Image Rotation:</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="imageRotation" value="0" checked>
+                                <span class="radiomark"></span>
+                                No rotation (0°)
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="imageRotation" value="90">
+                                <span class="radiomark"></span>
+                                Rotate 90° clockwise
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="imageRotation" value="180">
+                                <span class="radiomark"></span>
+                                Rotate 180°
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="imageRotation" value="270">
+                                <span class="radiomark"></span>
+                                Rotate 270° clockwise (90° counter-clockwise)
+                            </label>
+                        </div>
+                        <small style="color: #888; font-size: 0.8rem; margin-top: 5px; display: block;">
+                            The image will be permanently rotated during upload. This rotation cannot be changed later.
+                        </small>
                     </div>
                     <div class="form-group">
                         <label>Image Scaling Options:</label>

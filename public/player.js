@@ -369,9 +369,7 @@ class BattlemapPlayer {
     }
     
     drawBackgroundImage(img, map) {
-        // Player now uses same coordinate system as DM
-        // Pan values are in screen coordinates, background drawn at (0,0)
-        // Let the canvas transformation (zoom/pan) handle the positioning
+        // Draw the image normally (no rotation needed since it's applied during upload)
         this.ctx.drawImage(img, 0, 0, img.width, img.height);
     }
     
