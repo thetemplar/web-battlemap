@@ -305,6 +305,30 @@
                         <input type="file" id="mapBackground" accept="image/*">
                     </div>
                     <div class="form-group">
+                        <label>Image Scaling Options:</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="imageScaling" value="none" checked>
+                                <span class="radiomark"></span>
+                                No scaling (use original size)
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="imageScaling" value="fullhd">
+                                <span class="radiomark"></span>
+                                Scale to Full HD (1920x1080) - maintain aspect ratio
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="imageScaling" value="4k">
+                                <span class="radiomark"></span>
+                                Scale to 4K (4096x2160) - maintain aspect ratio
+                            </label>
+                        </div>
+                        <small style="color: #888; font-size: 0.8rem; margin-top: 5px; display: block;">
+                            Images will be scaled to fit within the selected resolution while preserving their aspect ratio. 
+                            This ensures optimal display quality for different screen types.
+                        </small>
+                    </div>
+                    <div class="form-group">
                         <label class="checkbox-label">
                             <input type="checkbox" id="saveMapPermanent">
                             <span class="checkmark"></span>

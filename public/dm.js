@@ -1374,6 +1374,8 @@ class BattlemapDM {
         document.getElementById('mapDescription').value = '';
         document.getElementById('mapBackground').value = '';
         document.getElementById('saveMapPermanent').checked = false;
+        // Reset radio button selection to "none"
+        document.querySelector('input[name="imageScaling"][value="none"]').checked = true;
         document.getElementById('mapSearchResults').innerHTML = '';
         this.selectedMapFromSearch = null;
     }
@@ -1383,6 +1385,7 @@ class BattlemapDM {
         const description = document.getElementById('mapDescription').value || '';
         const backgroundFile = document.getElementById('mapBackground').files[0];
         const savePermanent = document.getElementById('saveMapPermanent').checked;
+        const scalingOption = document.querySelector('input[name="imageScaling"]:checked').value;
         
         // If a map is selected from search, use it
         if (this.selectedMapFromSearch) {
@@ -1392,9 +1395,22 @@ class BattlemapDM {
         
         // Otherwise, handle file upload
         if (backgroundFile) {
-            this.uploadMapImage(backgroundFile, name, description, savePermanent).then(data => {
-                this.createMapWithBackground(name, data.imageUrl);
-            });
+            if (scalingOption === 'none') {
+                // Upload without scaling
+                this.uploadMapImage(backgroundFile, name, description, savePermanent).then(data => {
+                    this.createMapWithBackground(name, data.imageUrl);
+                });
+            } else {
+                // Scale the image before uploading
+                this.scaleImage(backgroundFile, scalingOption).then(scaledFile => {
+                    this.uploadMapImage(scaledFile, name, description, savePermanent).then(data => {
+                        this.createMapWithBackground(name, data.imageUrl);
+                    });
+                }).catch(error => {
+                    console.error('Image scaling error:', error);
+                    alert('Failed to scale image: ' + error.message);
+                });
+            }
         } else {
             this.createMapWithBackground(name, '');
         }
@@ -1514,6 +1530,81 @@ class BattlemapDM {
                     reject(error);
                 });
             }
+        });
+    }
+    
+    scaleImage(file, scalingOption) {
+        return new Promise((resolve, reject) => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = () => {
+                const originalWidth = img.naturalWidth;
+                const originalHeight = img.naturalHeight;
+                
+                console.log(`Original image dimensions: ${originalWidth}x${originalHeight}`);
+                
+                // Define target dimensions based on scaling option
+                let targetWidth, targetHeight;
+                if (scalingOption === 'fullhd') {
+                    targetWidth = 1920;
+                    targetHeight = 1080;
+                } else if (scalingOption === '4k') {
+                    targetWidth = 4096;
+                    targetHeight = 2160;
+                } else {
+                    reject(new Error('Invalid scaling option'));
+                    return;
+                }
+                
+                // Calculate scaling to fit within target dimensions while maintaining aspect ratio
+                const scaleX = targetWidth / originalWidth;
+                const scaleY = targetHeight / originalHeight;
+                const scale = Math.min(scaleX, scaleY); // Use the smaller scale to fit within bounds
+                
+                // Calculate new dimensions
+                const newWidth = Math.round(originalWidth * scale);
+                const newHeight = Math.round(originalHeight * scale);
+                
+                console.log(`Scaling image to: ${newWidth}x${newHeight} (scale: ${scale.toFixed(3)}) for ${scalingOption.toUpperCase()}`);
+                
+                // Set canvas size to the scaled dimensions
+                canvas.width = newWidth;
+                canvas.height = newHeight;
+                
+                // Draw the scaled image
+                ctx.drawImage(img, 0, 0, newWidth, newHeight);
+                
+                // Convert canvas to blob
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        // Create a new File object with the scaled image
+                        const scaledFile = new File([blob], file.name, {
+                            type: file.type,
+                            lastModified: Date.now()
+                        });
+                        console.log(`Successfully created scaled image: ${scaledFile.name} (${blob.size} bytes)`);
+                        resolve(scaledFile);
+                    } else {
+                        reject(new Error('Failed to create scaled image'));
+                    }
+                }, file.type, 0.9); // Use 0.9 quality for good balance
+            };
+            
+            img.onerror = () => {
+                reject(new Error('Failed to load image for scaling'));
+            };
+            
+            // Load the image from the file
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                img.src = e.target.result;
+            };
+            reader.onerror = () => {
+                reject(new Error('Failed to read image file'));
+            };
+            reader.readAsDataURL(file);
         });
     }
     
