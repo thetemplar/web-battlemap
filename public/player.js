@@ -67,6 +67,9 @@ class BattlemapPlayer {
                 // Set the first map as active if available
                 if (this.maps.size > 0) {
                     this.activeMapId = Array.from(this.maps.keys())[0];
+                    
+                    // Load player view state for the active map
+                    this.loadPlayerViewStateForMap(this.activeMapId);
                 }
                 
                 this.render();
@@ -224,6 +227,10 @@ class BattlemapPlayer {
             if (data.adventureId === this.adventureId) {
                 console.log('Player received active-map-changed:', data);
                 this.activeMapId = data.activeMapId;
+                
+                // Load player view state for the new active map
+                this.loadPlayerViewStateForMap(data.activeMapId);
+                
                 this.render();
             }
         });
@@ -531,6 +538,39 @@ class BattlemapPlayer {
         
         // Re-render with new view
         this.render();
+    }
+    
+    loadPlayerViewStateForMap(mapId) {
+        const map = this.maps.get(mapId);
+        if (!map) {
+            console.log('No map found for player view state:', mapId);
+            return;
+        }
+        
+        // Load player view state from map data
+        if (map.playerViewState) {
+            this.zoom = map.playerViewState.zoom || 1;
+            this.pan.x = map.playerViewState.panX || 0;
+            this.pan.y = map.playerViewState.panY || 0;
+            this.playerNameFontSize = map.playerViewState.fontSize || 14;
+            
+            console.log('Loaded player view state for map:', mapId, {
+                zoom: this.zoom,
+                pan: { x: this.pan.x, y: this.pan.y },
+                fontSize: this.playerNameFontSize
+            });
+        } else {
+            // Default values if no player view state exists
+            this.zoom = 1;
+            this.pan.x = 0;
+            this.pan.y = 0;
+            this.playerNameFontSize = 14;
+            
+            console.log('No player view state found for map:', mapId, 'using defaults');
+        }
+        
+        // Update player names overlay
+        this.updatePlayerNamesOverlay();
     }
     
     updatePlayerNamesOverlay() {

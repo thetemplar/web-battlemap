@@ -652,8 +652,19 @@ class BattlemapDM {
         });
         document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
         
+        // Reset status text for non-selection box tools
+        if (tool !== 'selection-box') {
+            document.getElementById('statusText').textContent = 'Ready';
+        }
+        
         // Update cursor
         this.canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+        
+        // Special handling for selection box tool
+        if (tool === 'selection-box') {
+            this.canvas.style.cursor = 'crosshair';
+            document.getElementById('statusText').textContent = 'Selection Box Tool: Draw a rectangle to set player view';
+        }
         
         // Sync fog tool state when select tool is chosen
         if (tool === 'select') {
@@ -687,6 +698,11 @@ class BattlemapDM {
             this.render();
         } else if (this.currentTool === 'select') {
             this.handleSelectMouseDown(x, y);
+        } else if (this.currentTool === 'selection-box') {
+            // Handle selection box drawing
+            this.isDrawing = true;
+            this.tempShape = this.createShape(this.currentTool, x, y);
+            document.getElementById('statusText').textContent = 'Drawing selection box...';
         } else if (this.currentTool === 'image' && this.pendingImageUrl) {
             // Handle image placement
             this.placeImageToken(x, y);
@@ -866,7 +882,8 @@ class BattlemapDM {
         const shapeNames = {
             'rectangle': 'Rectangle',
             'circle': 'Circle',
-            'line': 'Line'
+            'line': 'Line',
+            'selection-box': 'Selection Box'
         };
         
         return {
@@ -897,6 +914,14 @@ class BattlemapDM {
     finalizeShape() {
         if (!this.tempShape || !this.viewingMapId) return;
         
+        // Handle selection box differently - update player view instead of creating layer
+        if (this.tempShape.type === 'selection-box') {
+            this.handleSelectionBoxFinalized();
+            this.tempShape = null;
+            this.render(); // Re-render to remove the selection box from the canvas
+            return;
+        }
+        
         // Don't create shapes that are too small
         if (this.tempShape.type === 'line') {
             const dx = this.tempShape.endX - this.tempShape.x;
@@ -915,6 +940,90 @@ class BattlemapDM {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(layerData)
+        });
+    }
+    
+    handleSelectionBoxFinalized() {
+        if (!this.tempShape || !this.viewingMapId) return;
+        
+        // Get current map and background image for coordinate calculation
+        const map = this.maps.get(this.viewingMapId);
+        if (!map || !map.backgroundImage) {
+            console.log('No map or background image for selection box');
+            return;
+        }
+        
+        const bgImage = this.backgroundImages.get(map.backgroundImage);
+        if (!bgImage || !bgImage.complete) {
+            console.log('Background image not ready for selection box');
+            return;
+        }
+        
+        // Calculate the selection box bounds in image coordinates
+        const selectionX = Math.min(this.tempShape.x, this.tempShape.x + this.tempShape.width);
+        const selectionY = Math.min(this.tempShape.y, this.tempShape.y + this.tempShape.height);
+        const selectionWidth = Math.abs(this.tempShape.width);
+        const selectionHeight = Math.abs(this.tempShape.height);
+        
+        // Get the player viewport dimensions
+        const playerViewportWidth = this.canvas.width;
+        const playerViewportHeight = this.canvas.height;
+        
+        // Calculate zoom level to fit the selection box in the player viewport
+        // while maintaining aspect ratio
+        const zoomX = playerViewportWidth / selectionWidth;
+        const zoomY = playerViewportHeight / selectionHeight;
+        const fitZoom = Math.min(zoomX, zoomY);
+        
+        // Calculate the center of the selection box in image coordinates
+        const selectionCenterX = selectionX + (selectionWidth / 2);
+        const selectionCenterY = selectionY + (selectionHeight / 2);
+        
+        // Convert selection center to screen coordinates
+        // The selection center should be positioned at the center of the player viewport
+        const screenCenterX = playerViewportWidth / 2;
+        const screenCenterY = playerViewportHeight / 2;
+        const scaledSelectionCenterX = selectionCenterX * fitZoom;
+        const scaledSelectionCenterY = selectionCenterY * fitZoom;
+        
+        const panX = screenCenterX - scaledSelectionCenterX;
+        const panY = screenCenterY - scaledSelectionCenterY;
+        
+        console.log('=== SELECTION BOX FINALIZED ===');
+        console.log('Selection box:', selectionX, selectionY, selectionWidth, 'x', selectionHeight);
+        console.log('Player viewport:', playerViewportWidth, 'x', playerViewportHeight);
+        console.log('Calculated fit zoom:', fitZoom);
+        console.log('Selection center coordinates:', selectionCenterX, selectionCenterY);
+        console.log('Screen center coordinates:', screenCenterX, screenCenterY);
+        console.log('Scaled selection center coordinates:', scaledSelectionCenterX, scaledSelectionCenterY);
+        console.log('Calculated pan coordinates:', panX, panY);
+        
+        // Update player view to match the selection box
+        this.currentPlayerZoom = fitZoom;
+        this.currentPlayerPanX = panX;
+        this.currentPlayerPanY = panY;
+        
+        // Update status
+        document.getElementById('statusText').textContent = 'Player view updated from selection box';
+        
+        // Update UI
+        this.updatePlayerViewUI();
+        
+        // Save the player view state for the current map
+        this.savePlayerViewState();
+        
+        // Emit player view update
+        this.socket.emit('player-view-updated', {
+            adventureId: this.adventureId,
+            mapId: this.viewingMapId,
+            zoom: this.currentPlayerZoom,
+            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY },
+            fontSize: this.currentPlayerNameFontSize
+        });
+        
+        console.log('Player view updated from selection box:', {
+            zoom: this.currentPlayerZoom,
+            pan: { x: this.currentPlayerPanX, y: this.currentPlayerPanY }
         });
     }
     
@@ -1149,6 +1258,16 @@ class BattlemapDM {
             case 'rectangle':
                 this.ctx.fillStyle = layer.color;
                 this.ctx.fillRect(layer.x, layer.y, layer.width, layer.height);
+                break;
+            case 'selection-box':
+                // Draw selection box with dashed border and semi-transparent fill
+                this.ctx.strokeStyle = '#00ff00';
+                this.ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+                this.ctx.lineWidth = 3;
+                this.ctx.setLineDash([10, 5]);
+                this.ctx.fillRect(layer.x, layer.y, layer.width, layer.height);
+                this.ctx.strokeRect(layer.x, layer.y, layer.width, layer.height);
+                this.ctx.setLineDash([]); // Reset line dash
                 break;
             case 'circle':
                 this.ctx.fillStyle = layer.color;
@@ -1790,6 +1909,10 @@ class BattlemapDM {
         this.updateMapTabs();
         this.updateLayerList();
         this.updatePanSliderRanges(); // Update pan ranges for new map
+        
+        // Load player view state for the new map
+        this.loadPlayerViewState();
+        
         this.render();
     }
     
@@ -3066,6 +3189,9 @@ class BattlemapDM {
             this.currentPlayerPanY = pan.y;
         }
         
+        // Save the player view state for the current map
+        this.savePlayerViewState();
+        
         // Emit player view update to all connected clients
         this.socket.emit('player-view-updated', {
             adventureId: this.adventureId,
@@ -3083,6 +3209,9 @@ class BattlemapDM {
     
     updatePlayerNameFontSize(fontSize) {
         this.currentPlayerNameFontSize = fontSize;
+        
+        // Save the player view state for the current map
+        this.savePlayerViewState();
         
         // Emit font size update to all connected clients
         this.socket.emit('player-view-updated', {
@@ -3154,6 +3283,9 @@ class BattlemapDM {
         
         // Update UI
         this.updatePlayerViewUI();
+        
+        // Save the player view state for the current map
+        this.savePlayerViewState();
         
         // Emit player view update
         this.socket.emit('player-view-updated', {
@@ -3227,6 +3359,9 @@ class BattlemapDM {
         
         // Update UI
         this.updatePlayerViewUI();
+        
+        // Save the player view state for the current map
+        this.savePlayerViewState();
         
         // Send update to server
         this.updatePlayerView({
@@ -3323,12 +3458,98 @@ class BattlemapDM {
     }
     
     loadPlayerViewState() {
-        // Player view state is now handled locally per adventure
-        // Initialize with default values
-        this.currentPlayerZoom = 1;
-        this.currentPlayerPanX = 0;
-        this.currentPlayerPanY = 0;
+        // Load player view state for the current viewing map
+        if (!this.viewingMapId) {
+            this.currentPlayerZoom = 1;
+            this.currentPlayerPanX = 0;
+            this.currentPlayerPanY = 0;
+            this.updatePlayerViewUI();
+            return;
+        }
+        
+        const map = this.maps.get(this.viewingMapId);
+        if (!map) {
+            this.currentPlayerZoom = 1;
+            this.currentPlayerPanX = 0;
+            this.currentPlayerPanY = 0;
+            this.updatePlayerViewUI();
+            return;
+        }
+        
+        // Load player view state from map data
+        this.currentPlayerZoom = map.playerViewState?.zoom || 1;
+        this.currentPlayerPanX = map.playerViewState?.panX || 0;
+        this.currentPlayerPanY = map.playerViewState?.panY || 0;
+        this.currentPlayerNameFontSize = map.playerViewState?.fontSize || 14;
+        
+        console.log('Loaded player view state for map:', this.viewingMapId, {
+            zoom: this.currentPlayerZoom,
+            panX: this.currentPlayerPanX,
+            panY: this.currentPlayerPanY,
+            fontSize: this.currentPlayerNameFontSize
+        });
+        
         this.updatePlayerViewUI();
+    }
+    
+    savePlayerViewState() {
+        // Save player view state for the current viewing map
+        if (!this.viewingMapId) return;
+        
+        const map = this.maps.get(this.viewingMapId);
+        if (!map) return;
+        
+        // Initialize playerViewState if it doesn't exist
+        if (!map.playerViewState) {
+            map.playerViewState = {};
+        }
+        
+        // Save current player view state
+        map.playerViewState.zoom = this.currentPlayerZoom;
+        map.playerViewState.panX = this.currentPlayerPanX;
+        map.playerViewState.panY = this.currentPlayerPanY;
+        map.playerViewState.fontSize = this.currentPlayerNameFontSize;
+        
+        console.log('Saved player view state for map:', this.viewingMapId, {
+            zoom: this.currentPlayerZoom,
+            panX: this.currentPlayerPanX,
+            panY: this.currentPlayerPanY,
+            fontSize: this.currentPlayerNameFontSize
+        });
+        
+        // Save the adventure data
+        this.saveAdventure();
+    }
+    
+    saveAdventure() {
+        // Get the current adventure data
+        const adventure = {
+            id: this.adventureId,
+            maps: {}
+        };
+        
+        // Convert maps Map to object
+        this.maps.forEach((map, mapId) => {
+            adventure.maps[mapId] = map;
+        });
+        
+        // Save to server
+        fetch(`/api/adventures/${this.adventureId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(adventure)
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to save adventure');
+            }
+            console.log('Adventure saved successfully');
+        })
+        .catch(error => {
+            console.error('Error saving adventure:', error);
+        });
     }
     
     setupCollapsibleSections() {

@@ -282,6 +282,20 @@ app.post('/api/adventures/:id/verify', async (req, res) => {
     res.json({ success: true, adventure: { id: adventure.id, name: adventure.name } });
 });
 
+app.put('/api/adventures/:id', (req, res) => {
+    const { id } = req.params;
+    const adventureData = req.body;
+    
+    // Ensure the adventure ID matches
+    adventureData.id = id;
+    
+    if (saveAdventure(adventureData)) {
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ error: 'Failed to update adventure' });
+    }
+});
+
 app.delete('/api/adventures/:id', async (req, res) => {
     const { id } = req.params;
     const { password } = req.body;
