@@ -38,6 +38,7 @@ class BattlemapDM {
         this.drawingColor = '#ff0000';
         this.drawingOpacity = 1;
         this.drawingSize = 5;
+        this.drawingRotation = 0; // Default rotation in degrees
         this.tempShape = null;
         
         // Fog of War state
@@ -184,6 +185,9 @@ class BattlemapDM {
         // Keyboard events
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         
+        // Clipboard paste events
+        document.addEventListener('paste', (e) => this.handlePaste(e));
+        
         // Color and size controls
         const drawingColor = document.getElementById('drawingColor');
         if (drawingColor) {
@@ -210,6 +214,24 @@ class BattlemapDM {
                 const sizeValue = document.getElementById('sizeValue');
                 if (sizeValue) {
                     sizeValue.textContent = `${e.target.value}px`;
+                }
+            });
+        }
+        
+        const rotationSlider = document.getElementById('rotationSlider');
+        if (rotationSlider) {
+            rotationSlider.addEventListener('input', (e) => {
+                const rotation = parseInt(e.target.value);
+                this.drawingRotation = rotation;
+                const rotationValue = document.getElementById('rotationValue');
+                if (rotationValue) {
+                    rotationValue.textContent = `${rotation}°`;
+                }
+                
+                // Update temp shape rotation if drawing a cone
+                if (this.tempShape && this.tempShape.type === 'cone') {
+                    this.tempShape.rotation = rotation;
+                    this.render();
                 }
             });
         }
@@ -241,6 +263,14 @@ class BattlemapDM {
         if (uploadTokenBtn) {
             uploadTokenBtn.addEventListener('click', () => {
                 this.uploadTokenImage();
+            });
+        }
+        
+        // Clipboard paste area handler
+        const clipboardPasteArea = document.getElementById('clipboardPasteArea');
+        if (clipboardPasteArea) {
+            clipboardPasteArea.addEventListener('click', () => {
+                clipboardPasteArea.focus();
             });
         }
         
@@ -690,7 +720,11 @@ class BattlemapDM {
         
         // Reset status text for non-selection box tools
         if (tool !== 'selection-box') {
-            document.getElementById('statusText').textContent = 'Ready';
+            if (tool === 'image') {
+                document.getElementById('statusText').textContent = 'Image Tool: Click to upload or Ctrl+V to paste from clipboard';
+            } else {
+                document.getElementById('statusText').textContent = 'Ready';
+            }
         }
         
         // Update cursor
@@ -706,6 +740,14 @@ class BattlemapDM {
         if (tool === 'select') {
             this.currentFogTool = 'select';
             this.updateFogButtonStates();
+        }
+        
+        // Show/hide rotation controls based on tool
+        const rotationControls = document.getElementById('rotationControls');
+        if (tool === 'cone') {
+            rotationControls.style.display = 'block';
+        } else {
+            rotationControls.style.display = 'none';
         }
     }
     
@@ -884,9 +926,110 @@ class BattlemapDM {
                 this.canvas.style.cursor = 'default';
                 document.getElementById('statusText').textContent = 'Ready';
             }
+        } else if (e.ctrlKey && e.key === 'v') {
+            // Handle Ctrl+V for clipboard paste
+            // The actual paste handling is done in handlePaste function
+            // This just prevents default behavior when image tool is selected
+            if (this.currentTool === 'image') {
+                e.preventDefault();
+            }
+        }
+    }
+    
+    handlePaste(e) {
+        // Check if we're in the image upload modal
+        const modal = document.getElementById('imageUploadModal');
+        if (modal && modal.style.display === 'block') {
+            this.handleModalPaste(e);
+            return;
         }
         
-
+        // Only handle paste if image tool is selected on canvas
+        if (this.currentTool !== 'image') {
+            return;
+        }
+        
+        const items = e.clipboardData.items;
+        if (!items) {
+            return;
+        }
+        
+        // Look for image data in clipboard
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.indexOf('image') !== -1) {
+                const file = item.getAsFile();
+                if (file) {
+                    // Generate a name for the clipboard image
+                    const timestamp = Date.now();
+                    const tokenName = `Clipboard_${timestamp}`;
+                    
+                    // Upload the clipboard image
+                    this.uploadImageFile(file, tokenName, false).then(data => {
+                        // Set the image tool as active and store the image URL for placement
+                        this.pendingImageUrl = data.imageUrl;
+                        this.pendingImageName = tokenName;
+                        // Change cursor to indicate image placement mode
+                        this.canvas.style.cursor = 'crosshair';
+                        // Update status
+                        document.getElementById('statusText').textContent = `Click to place ${tokenName} (Press Esc to cancel)`;
+                    }).catch(error => {
+                        console.error('Clipboard image upload error:', error);
+                        alert('Failed to upload clipboard image: ' + error.message);
+                    });
+                    
+                    e.preventDefault();
+                    break;
+                }
+            }
+        }
+    }
+    
+    handleModalPaste(e) {
+        const items = e.clipboardData.items;
+        if (!items) {
+            return;
+        }
+        
+        // Look for image data in clipboard
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.indexOf('image') !== -1) {
+                const file = item.getAsFile();
+                if (file) {
+                    // Generate a name for the clipboard image
+                    const timestamp = Date.now();
+                    const tokenName = `Clipboard_${timestamp}`;
+                    
+                    // Store the file and name for later upload
+                    this.modalClipboardImage = file;
+                    this.modalClipboardImageName = tokenName;
+                    
+                    // Show preview
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const previewImage = document.getElementById('clipboardPreviewImage');
+                        previewImage.src = e.target.result;
+                        document.getElementById('clipboardPreview').style.display = 'block';
+                        
+                        // Update paste area to show success
+                        document.getElementById('clipboardPasteArea').innerHTML = `
+                            <div class="paste-placeholder">
+                                <i class="fas fa-check-circle" style="color: #28a745;"></i>
+                                <p>Image pasted successfully! Click "Use Token" to continue.</p>
+                            </div>
+                        `;
+                        
+                        // Auto-fill the token name
+                        document.getElementById('tokenName').value = tokenName;
+                    };
+                    reader.readAsDataURL(file);
+                    
+                    e.preventDefault();
+                    break;
+                }
+            }
+        }
     }
     
     handleSelectMouseDown(x, y) {
@@ -928,10 +1071,11 @@ class BattlemapDM {
             'rectangle': 'Rectangle',
             'circle': 'Circle',
             'line': 'Line',
+            'cone': 'Cone',
             'selection-box': 'Selection Box'
         };
         
-        return {
+        const shape = {
             type,
             x,
             y,
@@ -942,6 +1086,14 @@ class BattlemapDM {
             size: this.drawingSize,
             name: shapeNames[type] || type.charAt(0).toUpperCase() + type.slice(1)
         };
+        
+        // Add rotation support for cone shapes
+        if (type === 'cone') {
+            shape.rotation = this.drawingRotation || 0; // Use current drawing rotation or default to 0
+            shape.angle = 53; // Default cone angle in degrees
+        }
+        
+        return shape;
     }
     
     createFogSelectionBox(x, y) {
@@ -1180,27 +1332,46 @@ class BattlemapDM {
         
         const original = this.originalLayerData;
         
-        switch (this.resizeHandle) {
-            case 'bottom-right':
-                this.selectedLayer.width = Math.max(10, x - original.x);
-                this.selectedLayer.height = Math.max(10, y - original.y);
-                break;
-            case 'bottom-left':
-                this.selectedLayer.x = x;
-                this.selectedLayer.width = Math.max(10, original.x + original.width - x);
-                this.selectedLayer.height = Math.max(10, y - original.y);
-                break;
-            case 'top-right':
-                this.selectedLayer.y = y;
-                this.selectedLayer.width = Math.max(10, x - original.x);
-                this.selectedLayer.height = Math.max(10, original.y + original.height - y);
-                break;
-            case 'top-left':
-                this.selectedLayer.x = x;
-                this.selectedLayer.y = y;
-                this.selectedLayer.width = Math.max(10, original.x + original.width - x);
-                this.selectedLayer.height = Math.max(10, original.y + original.height - y);
-                break;
+        if (this.selectedLayer.type === 'cone' && this.resizeHandle === 'radius') {
+            // Resize cone radius and update rotation
+            const centerX = this.selectedLayer.x;
+            const centerY = this.selectedLayer.y;
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const newRadius = Math.sqrt(dx * dx + dy * dy);
+            const minRadius = 5;
+            
+            // Calculate new rotation angle from center to mouse position
+            const newRotation = Math.atan2(dy, dx) * 180 / Math.PI;
+            // Normalize to 0-360 range
+            const normalizedRotation = (newRotation + 360) % 360;
+            
+            this.selectedLayer.width = Math.max(minRadius * 2, newRadius * 2);
+            this.selectedLayer.rotation = normalizedRotation;
+        } else {
+            // Handle other shapes
+            switch (this.resizeHandle) {
+                case 'bottom-right':
+                    this.selectedLayer.width = Math.max(10, x - original.x);
+                    this.selectedLayer.height = Math.max(10, y - original.y);
+                    break;
+                case 'bottom-left':
+                    this.selectedLayer.x = x;
+                    this.selectedLayer.width = Math.max(10, original.x + original.width - x);
+                    this.selectedLayer.height = Math.max(10, y - original.y);
+                    break;
+                case 'top-right':
+                    this.selectedLayer.y = y;
+                    this.selectedLayer.width = Math.max(10, x - original.x);
+                    this.selectedLayer.height = Math.max(10, original.y + original.height - y);
+                    break;
+                case 'top-left':
+                    this.selectedLayer.x = x;
+                    this.selectedLayer.y = y;
+                    this.selectedLayer.width = Math.max(10, original.x + original.width - x);
+                    this.selectedLayer.height = Math.max(10, original.y + original.height - y);
+                    break;
+            }
         }
     }
     
@@ -1223,6 +1394,41 @@ class BattlemapDM {
                 const dx = x - shape.x;
                 const dy = y - shape.y;
                 return dx * dx + dy * dy <= shape.width * shape.width / 4;
+            case 'cone':
+                // Check if point is within the cone's radius and angle
+                const centerX = shape.x;
+                const centerY = shape.y;
+                const radius = Math.abs(shape.width) / 2;
+                const angle = shape.angle || 53;
+                const rotation = shape.rotation || 0;
+                
+                // First check if point is within the circle radius
+                const coneDx = x - centerX;
+                const coneDy = y - centerY;
+                const distanceSquared = coneDx * coneDx + coneDy * coneDy;
+                if (distanceSquared > radius * radius) return false;
+                
+                // Then check if point is within the cone angle
+                const pointAngle = Math.atan2(coneDy, coneDx) * 180 / Math.PI;
+                const rotationRad = rotation * Math.PI / 180;
+                const angleRad = angle * Math.PI / 180;
+                
+                // Normalize angles to 0-360 range
+                let normalizedPointAngle = (pointAngle + 360) % 360;
+                let normalizedRotation = (rotation + 360) % 360;
+                
+                // Calculate the start and end angles of the cone
+                const startAngle = normalizedRotation - (angle / 2);
+                const endAngle = normalizedRotation + (angle / 2);
+                
+                // Handle angle wrapping
+                if (startAngle < 0) {
+                    return normalizedPointAngle >= startAngle + 360 || normalizedPointAngle <= endAngle;
+                } else if (endAngle > 360) {
+                    return normalizedPointAngle >= startAngle || normalizedPointAngle <= endAngle - 360;
+                } else {
+                    return normalizedPointAngle >= startAngle && normalizedPointAngle <= endAngle;
+                }
             case 'line':
                 const tolerance = 5;
                 const A = x - shape.x;
@@ -1252,7 +1458,29 @@ class BattlemapDM {
         const handleSize = 8;
         const tolerance = handleSize / 2;
         
-        // Calculate corner positions
+        if (shape.type === 'cone') {
+            // For cones, we'll use the radius as the resize handle
+            // The handle will be at the edge of the cone in the direction of rotation
+            const centerX = shape.x;
+            const centerY = shape.y;
+            const radius = Math.abs(shape.width) / 2;
+            const rotation = shape.rotation || 0;
+            
+            // Calculate the handle position at the edge of the cone
+            const handleAngle = rotation * Math.PI / 180;
+            const handleX = centerX + radius * Math.cos(handleAngle);
+            const handleY = centerY + radius * Math.sin(handleAngle);
+            
+            const dx = x - handleX;
+            const dy = y - handleY;
+            if (dx * dx + dy * dy <= tolerance * tolerance) {
+                return 'radius';
+            }
+            
+            return null;
+        }
+        
+        // Calculate corner positions for other shapes
         const corners = {
             'bottom-right': { x: shape.x + shape.width, y: shape.y + shape.height },
             'bottom-left': { x: shape.x, y: shape.y + shape.height },
@@ -1280,6 +1508,8 @@ class BattlemapDM {
             case 'bottom-left':
             case 'top-right':
                 return 'ne-resize';
+            case 'radius':
+                return 'ns-resize';
             default:
                 return 'default';
         }
@@ -1298,20 +1528,38 @@ class BattlemapDM {
         this.ctx.lineWidth = 1;
         this.ctx.setLineDash([]); // Solid line for handles
         
-        // Draw corner handles
-        const corners = [
-            { x: layer.x, y: layer.y }, // top-left
-            { x: layer.x + layer.width, y: layer.y }, // top-right
-            { x: layer.x, y: layer.y + layer.height }, // bottom-left
-            { x: layer.x + layer.width, y: layer.y + layer.height } // bottom-right
-        ];
-        
-        corners.forEach(corner => {
+        if (layer.type === 'cone') {
+            // Draw radius handle for cone
+            const centerX = layer.x;
+            const centerY = layer.y;
+            const radius = Math.abs(layer.width) / 2;
+            const rotation = layer.rotation || 0;
+            
+            // Calculate the handle position at the edge of the cone
+            const handleAngle = rotation * Math.PI / 180;
+            const handleX = centerX + radius * Math.cos(handleAngle);
+            const handleY = centerY + radius * Math.sin(handleAngle);
+            
             this.ctx.beginPath();
-            this.ctx.rect(corner.x - halfHandle, corner.y - halfHandle, handleSize, handleSize);
+            this.ctx.arc(handleX, handleY, halfHandle, 0, 2 * Math.PI);
             this.ctx.fill();
             this.ctx.stroke();
-        });
+        } else {
+            // Draw corner handles for other shapes
+            const corners = [
+                { x: layer.x, y: layer.y }, // top-left
+                { x: layer.x + layer.width, y: layer.y }, // top-right
+                { x: layer.x, y: layer.y + layer.height }, // bottom-left
+                { x: layer.x + layer.width, y: layer.y + layer.height } // bottom-right
+            ];
+            
+            corners.forEach(corner => {
+                this.ctx.beginPath();
+                this.ctx.rect(corner.x - halfHandle, corner.y - halfHandle, handleSize, handleSize);
+                this.ctx.fill();
+                this.ctx.stroke();
+            });
+        }
         
         // Restore context state
         this.ctx.restore();
@@ -1446,6 +1694,9 @@ class BattlemapDM {
                 this.ctx.lineTo(layer.endX, layer.endY);
                 this.ctx.stroke();
                 break;
+            case 'cone':
+                this.drawCone(layer);
+                break;
             case 'image':
                 if (layer.imageUrl) {
                     // Check if image is already cached
@@ -1491,6 +1742,9 @@ class BattlemapDM {
                     this.ctx.moveTo(layer.x, layer.y);
                     this.ctx.lineTo(layer.endX, layer.endY);
                     this.ctx.stroke();
+                    break;
+                case 'cone':
+                    this.drawConeOutline(layer);
                     break;
                 case 'image':
                     this.ctx.strokeRect(layer.x, layer.y, layer.width, layer.height);
@@ -1548,6 +1802,18 @@ class BattlemapDM {
                 textY = layer.y;
                 break;
                 
+                            case 'cone':
+                    // Calculate radius and rotation
+                    const coneRadius = Math.abs(layer.width) / 2;
+                    const coneRadiusInMeters = this.convertPixelsToMeters(coneRadius);
+                    const coneRotation = layer.rotation || 0;
+                    measurementText = `r: ${coneRadiusInMeters.toFixed(1)}m / ∠: ${coneRotation.toFixed()}°`;
+                    
+                    // Position text at the center of the cone
+                    textX = layer.x;
+                    textY = layer.y;
+                    break;
+                
             case 'rectangle':
             case 'image':
                 // Calculate width and height
@@ -1579,6 +1845,67 @@ class BattlemapDM {
         // Convert pixels to grid units, then to meters
         const gridUnits = pixels / this.battlegridSize;
         return gridUnits * this.battlegridScaleFactor;
+    }
+    
+    drawCone(layer) {
+        const centerX = layer.x;
+        const centerY = layer.y;
+        const radius = Math.abs(layer.width) / 2;
+        const angle = layer.angle || 53; // Default to 53 degrees if not specified
+        const rotation = layer.rotation || 0; // Default to 0 degrees if not specified
+        
+        // Convert angles to radians
+        const angleRad = (angle * Math.PI) / 180;
+        const rotationRad = (rotation * Math.PI) / 180;
+        
+        // Calculate the start and end angles for the cone
+        const startAngle = rotationRad - (angleRad / 2);
+        const endAngle = rotationRad + (angleRad / 2);
+        
+        // Set fill style
+        this.ctx.fillStyle = layer.color;
+        this.ctx.globalAlpha = layer.opacity || 1;
+        
+        // Draw the cone as a filled arc
+        this.ctx.beginPath();
+        this.ctx.moveTo(centerX, centerY); // Start at center
+        this.ctx.arc(centerX, centerY, radius, startAngle, endAngle); // Draw the arc
+        this.ctx.closePath(); // Close the path back to center
+        this.ctx.fill();
+        
+        // Reset global alpha
+        this.ctx.globalAlpha = 1;
+    }
+    
+    drawConeOutline(layer) {
+        const centerX = layer.x;
+        const centerY = layer.y;
+        const radius = Math.abs(layer.width) / 2;
+        const angle = layer.angle || 53; // Default to 53 degrees if not specified
+        const rotation = layer.rotation || 0; // Default to 0 degrees if not specified
+        
+        // Convert angles to radians
+        const angleRad = (angle * Math.PI) / 180;
+        const rotationRad = (rotation * Math.PI) / 180;
+        
+        // Calculate the start and end angles for the cone
+        const startAngle = rotationRad - (angleRad / 2);
+        const endAngle = rotationRad + (angleRad / 2);
+        
+        // Set stroke style for selection outline
+        this.ctx.strokeStyle = '#00ff00';
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([5, 5]);
+        
+        // Draw the cone outline
+        this.ctx.beginPath();
+        this.ctx.moveTo(centerX, centerY); // Start at center
+        this.ctx.arc(centerX, centerY, radius, startAngle, endAngle); // Draw the arc
+        this.ctx.closePath(); // Close the path back to center
+        this.ctx.stroke();
+        
+        // Reset line dash
+        this.ctx.setLineDash([]);
     }
     
     drawFogOfWar(map) {
@@ -2645,6 +2972,9 @@ class BattlemapDM {
                     <button onclick="battlemapDM.renameLayer('${layer.id}')" title="Rename">
                         <i class="fas fa-edit"></i>
                     </button>
+                    ${layer.type === 'cone' ? `<button onclick="battlemapDM.editConeProperties('${layer.id}')" title="Edit Cone Properties">
+                        <i class="fas fa-cog"></i>
+                    </button>` : ''}
                     <button onclick="battlemapDM.selectLayer('${layer.id}')" title="Select">
                         <i class="fas fa-mouse-pointer"></i>
                     </button>
@@ -2875,6 +3205,50 @@ class BattlemapDM {
         }
     }
     
+    editConeProperties(layerId) {
+        const map = this.maps.get(this.viewingMapId);
+        if (!map) return;
+        
+        const layer = map.layers.find(l => l.id === layerId);
+        if (!layer || layer.type !== 'cone') return;
+        
+        const currentRotation = layer.rotation || 0;
+        const currentAngle = layer.angle || 53;
+        
+        const newRotation = prompt('Enter rotation angle (0-360 degrees):', currentRotation);
+        const newAngle = prompt('Enter cone angle (1-180 degrees):', currentAngle);
+        
+        if (newRotation !== null && newAngle !== null) {
+            const rotation = parseInt(newRotation);
+            const angle = parseInt(newAngle);
+            
+            if (!isNaN(rotation) && rotation >= 0 && rotation <= 360 &&
+                !isNaN(angle) && angle >= 1 && angle <= 180) {
+                
+                layer.rotation = rotation;
+                layer.angle = angle;
+                
+                // Update the layer on the server
+                fetch(`/api/adventures/${this.adventureId}/maps/${this.viewingMapId}/layers/${layerId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(layer)
+                }).then(response => {
+                    if (response.ok) {
+                        this.updateLayerList();
+                        this.render();
+                    } else {
+                        console.error('Failed to update cone properties');
+                    }
+                });
+            } else {
+                alert('Please enter valid numbers: rotation (0-360) and angle (1-180)');
+            }
+        }
+    }
+    
     closeModals() {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.style.display = 'none';
@@ -2888,6 +3262,14 @@ class BattlemapDM {
             // If closing monster search modal, hide sticky button
             if (modal.id === 'monsterSearchModal') {
                 document.getElementById('stickyMonsterBtn').style.display = 'none';
+            }
+            
+            // If closing image upload modal, remove paste ready indicator
+            if (modal.id === 'imageUploadModal') {
+                const pasteArea = document.getElementById('clipboardPasteArea');
+                if (pasteArea) {
+                    pasteArea.classList.remove('paste-ready');
+                }
             }
         });
     }
@@ -3145,6 +3527,24 @@ class BattlemapDM {
         document.getElementById('tokenSearch').value = '';
         document.getElementById('tokenSearchResults').innerHTML = '';
         this.selectedTokenFromSearch = null;
+        
+        // Reset clipboard preview
+        document.getElementById('clipboardPreview').style.display = 'none';
+        document.getElementById('clipboardPasteArea').innerHTML = `
+            <div class="paste-placeholder">
+                <i class="fas fa-paste"></i>
+                <p>Press Ctrl+V to paste an image from clipboard</p>
+            </div>
+        `;
+        
+        // Store clipboard image data for modal
+        this.modalClipboardImage = null;
+        this.modalClipboardImageName = null;
+        
+        // Focus the paste area for keyboard events and add visual indicator
+        const pasteArea = document.getElementById('clipboardPasteArea');
+        pasteArea.focus();
+        pasteArea.classList.add('paste-ready');
     }
     
     uploadTokenImage() {
@@ -3152,8 +3552,29 @@ class BattlemapDM {
         const tokenName = document.getElementById('tokenName').value || 'Token';
         const savePermanent = document.getElementById('savePermanent').checked;
         
+        // Check if we have a clipboard image
+        if (this.modalClipboardImage) {
+            // Use the clipboard image
+            this.uploadImageFile(this.modalClipboardImage, tokenName, savePermanent).then(data => {
+                this.closeModals();
+                // Set the image tool as active and store the image URL for placement
+                this.setTool('image');
+                this.pendingImageUrl = data.imageUrl;
+                this.pendingImageName = tokenName;
+                // Change cursor to indicate image placement mode
+                this.canvas.style.cursor = 'crosshair';
+                // Update status
+                document.getElementById('statusText').textContent = `Click to place ${tokenName} (Press Esc to cancel)`;
+            }).catch(error => {
+                console.error('Clipboard image upload error:', error);
+                alert('Failed to upload clipboard image: ' + error.message);
+            });
+            return;
+        }
+        
+        // Check if we have a file input image
         if (!imageFile) {
-            alert('Please select an image file');
+            alert('Please select an image file or paste an image from clipboard');
             return;
         }
         

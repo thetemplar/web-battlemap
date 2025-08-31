@@ -948,6 +948,108 @@ canvas {
     margin-top: 10px;
 }
 
+/* Clipboard Paste Styles */
+.clipboard-paste-section {
+    margin-bottom: 20px;
+}
+
+.clipboard-paste-section h5 {
+    color: #ffd700;
+    margin-bottom: 15px;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.clipboard-paste-area {
+    border: 2px dashed #555;
+    border-radius: 8px;
+    padding: 30px;
+    text-align: center;
+    background: #2d2d2d;
+    transition: border-color 0.3s ease, background-color 0.3s ease;
+    cursor: pointer;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.clipboard-paste-area:hover {
+    border-color: #007bff;
+    background: #3a3a3a;
+}
+
+.clipboard-paste-area.paste-ready {
+    border-color: #28a745;
+    background: #2a3a2a;
+}
+
+.clipboard-paste-area.paste-ready:hover {
+    border-color: #28a745;
+    background: #3a4a3a;
+}
+
+.clipboard-paste-area:focus {
+    outline: none;
+    border-color: #007bff;
+    background: #3a3a3a;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.paste-placeholder {
+    color: #888;
+}
+
+.paste-placeholder i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    display: block;
+}
+
+.paste-placeholder p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.clipboard-preview {
+    margin-top: 15px;
+    text-align: center;
+}
+
+.clipboard-preview img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 4px;
+    border: 1px solid #555;
+}
+
+.upload-separator {
+    text-align: center;
+    margin: 20px 0;
+    position: relative;
+}
+
+.upload-separator::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: #555;
+}
+
+.upload-separator span {
+    background: #2d2d2d;
+    padding: 0 15px;
+    color: #888;
+    font-size: 0.9rem;
+    position: relative;
+    z-index: 1;
+}
+
 .token-result-item {
     display: flex;
     align-items: center;
